@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Resultado</title>
+
+    <link 
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" 
+        rel="stylesheet">
+
+    <style>
+        body {
+            background: radial-gradient(circle at top, #0f172a 0%, #020617 100%);
+            color: #e5e7eb;
+            font-family: "Inter", sans-serif;
+            padding: 50px 20px;
+        }
+
+        .box {
+            max-width: 520px;
+            margin: auto;
+            background: rgba(15,23,42,0.9);
+            border-radius: 20px;
+            padding: 35px;
+            border: 1px solid rgba(56,189,248,0.35);
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #38bdf8;
+        }
+
+        p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+
+        .btn-pro {
+            display: block;
+            margin-bottom: 12px;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .btn-main {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #052e16;
+        }
+
+        .btn-sec {
+            background: rgba(56,189,248,0.25);
+            border: 1px solid rgba(56,189,248,0.5);
+            color: #e0f2fe;
+        }
+
+        .btn-sec:hover {
+            background: rgba(56,189,248,0.35);
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <div class="box">
+        <h1>{{ titulo }}</h1>
+        <p>{{ mensaje }}</p>
+
+        <a href="/" class="btn-pro btn-main">Volver al panel</a>
+
+        <a href="/catalogo/automotores-pepe" 
+           target="_blank" 
+           class="btn-pro btn-sec">
+           Ver catálogo completo
+        </a>
+    </div>
+
+</body>
+</html>

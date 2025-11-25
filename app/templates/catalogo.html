@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>{{ empresa.nombre if empresa else "Catálogo de Productos" }}</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Inter -->
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=inter:300,400,500,600,700" rel="stylesheet" />
+
+    <!-- Montserrat -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+
+        /* MODO OSCURO PREMIUM */
+        body {
+            background: radial-gradient(circle at top, #0d1526 0%, #030712 55%, #000 100%);
+            color: #e5e7eb;
+            font-family: "Inter", sans-serif;
+            font-size: 15px;
+        }
+
+        @media (max-width: 576px) {
+            body { font-size: 17px; }
+        }
+
+        body.light-mode {
+            background: #f3f4f6;
+            color: #0f172a;
+        }
+
+        .container-main { max-width: 1180px; }
+
+        /* BANNER */
+        .banner-wrap {
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.7);
+            border: 1px solid rgba(148,163,184,0.35);
+        }
+
+        .banner-wrap img { width: 100%; display: block; }
+
+        /* HEADER */
+        .header-box {
+            background: linear-gradient(135deg, rgba(15,23,42,0.97), rgba(5,36,61,0.97));
+            border-radius: 18px;
+            padding: 20px 24px;
+            margin-top: 18px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(56,189,248,0.6);
+            box-shadow: 0 18px 40px rgba(15,23,42,0.9);
+        }
+
+        body.light-mode .header-box {
+            background: linear-gradient(135deg, #e5e7eb, #d1fae5);
+            border-color: #22c55e;
+        }
+
+        .header-logo {
+            max-width: 150px;
+            filter: drop-shadow(0 0 20px rgba(56,189,248,0.55));
+        }
+
+        .header-title {
+            color: #93c5fd;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .header-name {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #e0f2fe;
+        }
+
+        .header-whatsapp span {
+            color: #86efac;
+            font-weight: 600;
+        }
+
+        body.light-mode .header-title { color: #2563eb; }
+        body.light-mode .header-name { color: #111827; }
+        body.light-mode .header-whatsapp span { color: #16a34a; }
+
+        /* CTA DESCARGA */
+        .cta-download {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            padding: 10px 22px;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #052e16 !important;
+            text-decoration: none;
+            box-shadow: 0 0 12px rgba(34,197,94,0.6);
+            transition: 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .cta-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 18px rgba(34,197,94,0.9);
+        }
+
+        /* ICONO ENGRANAJE PULSE */
+        .gear-icon {
+            filter: drop-shadow(0 0 10px rgba(34,197,94,0.9));
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.85; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.85; }
+        }
+
+        /* RESPONSIVE HEADER */
+        @media (max-width: 768px) {
+            .header-box { text-align: center; padding: 22px; }
+            .header-logo { max-width: 130px; margin-bottom: 10px; }
+            .cta-download { width: 100%; justify-content: center; }
+        }
+
+        /* CATEGORY BAR */
+        .category-bar {
+            background: rgba(15,23,42,0.9);
+            border-radius: 999px;
+            padding: 8px 14px;
+            border: 1px solid rgba(148,163,184,0.5);
+            box-shadow: 0 12px 30px rgba(15,23,42,0.8);
+        }
+
+        .category-pill {
+            border-radius: 999px;
+            padding: 5px 14px;
+            font-size: 0.8rem;
+            color: #e5e7eb;
+            transition: .18s;
+            border: 1px solid transparent;
+            background: transparent;
+        }
+
+        .category-pill:hover {
+            background: rgba(15,118,110,0.4);
+            border-color: rgba(45,212,191,0.8);
+        }
+
+        .category-pill.active {
+            background: linear-gradient(135deg, #0f766e, #22c55e);
+            color: #020617;
+            font-weight: 600;
+        }
+
+        /* BUSCADOR */
+        .search-input {
+            background: rgba(15,23,42,0.85);
+            border: 1px solid rgba(75,85,99,0.9);
+            color: #e5e7eb;
+        }
+
+        .btn-search {
+            background: linear-gradient(135deg, #0ea5e9, #22c55e);
+            border: none;
+            padding-inline: 22px;
+            font-weight: 500;
+        }
+
+        body.light-mode .search-input {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        /* TOOLBAR STICKY (vista, orden, tema, favs) */
+        .toolbar-top {
+            margin-top: 8px;
+            margin-bottom: 10px;
+        }
+
+        .sticky-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 900;
+            padding: 8px 0;
+            background: radial-gradient(circle at top, rgba(3,7,18,0.98) 0, rgba(3,7,18,0.96) 70%);
+        }
+
+        body.light-mode .sticky-toolbar {
+            background: #e5e7eb;
+        }
+
+        .sort-select {
+            min-width: 170px;
+        }
+        /* CARDS PREMIUM RESTAURADAS */
+        .catalog-card {
+            position: relative;
+            background: radial-gradient(circle at top left, #111827 0%, #0a0f1f 70%);
+            border: 1px solid rgba(30,64,175,0.7);
+            border-radius: 18px;
+            overflow: hidden;
+            transition: 0.18s;
+            cursor: pointer;
+            box-shadow: 0 0 22px rgba(3, 7, 18, 0.7);
+        }
+
+        .catalog-card:hover {
+            border-color: rgba(56,189,248,0.9);
+            transform: translateY(-4px);
+            box-shadow: 0 0 28px rgba(56,189,248,0.35);
+        }
+
+        .catalog-card img {
+            width: 100%;
+            height: 190px;
+            object-fit: contain;
+            background: #020617;
+            padding: 18px;
+            border-bottom: 1px solid rgba(30,64,175,0.5);
+        }
+
+        .product-meta { color: #cbd5e1 !important; font-size: 0.85rem; }
+        .product-code { color: #ffffff !important; font-weight: 600; font-size: 1rem; }
+        .product-desc { color: #e5e7eb !important; font-size: 0.92rem; }
+        .product-price { color: #22c55e !important; font-size: 1rem; font-weight: 600; }
+
+        body.light-mode .catalog-card {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            box-shadow: 0 0 16px rgba(15,23,42,0.2);
+        }
+        body.light-mode .catalog-card img {
+            background: #f9fafb;
+            border-bottom-color: #e5e7eb;
+        }
+        body.light-mode .product-meta { color: #64748b !important; }
+        body.light-mode .product-code { color: #0f172a !important; }
+        body.light-mode .product-desc { color: #111827 !important; }
+
+        /* Vista LISTA */
+        .catalog-card.list-view {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+        }
+
+        .catalog-card.list-view img {
+            width: 40%;
+            max-width: 220px;
+            height: 100%;
+            border-right: 1px solid rgba(30,64,175,0.4);
+            border-bottom: none;
+        }
+
+        .catalog-card.list-view .card-body {
+            flex: 1;
+        }
+
+        @media (max-width: 576px) {
+            .catalog-card.list-view img { width: 45%; }
+        }
+
+        /* FAVORITOS */
+        .favorite-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border: none;
+            background: rgba(15,23,42,0.7);
+            color: #e5e7eb;
+            border-radius: 999px;
+            width: 30px;
+            height: 30px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .favorite-btn.active {
+            background: #fbbf24;
+            color: #1f2937;
+            box-shadow: 0 0 10px rgba(250,204,21,0.9);
+        }
+
+        /* CARRITO FLOTANTE */
+        .btn-cart-floating {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            border-radius: 999px;
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #051b0a;
+            font-weight: 600;
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .total-box { margin-bottom: 70px !important; }
+
+        /* MODAL OSCURO */
+        .modal-content {
+            background: radial-gradient(circle at top, #0f172a 0%, #0a0f1f 70%) !important;
+            color: #e5e7eb !important;
+            border-radius: 16px !important;
+            border: 1px solid rgba(56,189,248,0.4) !important;
+            box-shadow: 0 0 35px rgba(0,0,0,0.8) !important;
+        }
+
+        .modal-img {
+            background: #0a0f1f !important;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid rgba(56,189,248,0.3);
+        }
+
+        .btn-close {
+            filter: invert(1) brightness(2) !important;
+        }
+
+        #btnAgregar {
+            background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+            color: #052e16 !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+        }
+
+        /* SEMÁFORO DE STOCK (modal) */
+        .stock-pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .stock-green {
+            background: rgba(34,197,94,0.15);
+            color: #bbf7d0;
+        }
+        .stock-yellow {
+            background: rgba(250,204,21,0.15);
+            color: #facc15;
+        }
+        .stock-red {
+            background: rgba(248,113,113,0.15);
+            color: #fca5a5;
+        }
+        .stock-gray {
+            background: rgba(148,163,184,0.15);
+            color: #cbd5e1;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<div class="container container-main mt-4 mb-5">
+
+    <!-- BANNER -->
+    <div class="banner-wrap mb-4">
+        <img src="/static/images/banner.jpg" alt="Banner">
+    </div>
+
+    <!-- HEADER -->
+    {% if empresa %}
+    <div class="header-box d-flex align-items-center justify-content-between flex-wrap gap-3">
+
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <img src="/static/images/logo.png" class="header-logo">
+            <div>
+                <div class="header-title">Catálogo oficial</div>
+                <div class="header-name">{{ empresa.nombre }}</div>
+                <div class="header-whatsapp">
+                    WhatsApp: <span>{{ empresa.whatsapp }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA DESCARGA -->
+        <a href="/static/lista_precios.pdf" class="cta-download" download>
+            Descargar lista de precios COMPLETA
+        </a>
+
+    </div>
+    {% endif %}
+
+    <!-- FILTROS DE CATEGORÍA -->
+    {% if categorias %}
+    <div class="mt-3 mb-3 d-flex justify-content-center">
+        <div class="category-bar d-inline-flex flex-wrap gap-2 justify-content-center">
+            <button type="button" class="category-pill active" data-cat="">Todos</button>
+
+            {% for cat in categorias %}
+            <button type="button" class="category-pill" data-cat="{{ cat }}">{{ cat }}</button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- BUSCADOR -->
+    <form method="get" class="search-wrap d-flex mb-2" onsubmit="event.preventDefault();">
+        <input class="form-control me-2 search-input" id="search-input" type="search" placeholder="Buscar por descripción…" value="">
+        <button type="button" class="btn btn-search" id="search-btn">Buscar</button>
+    </form>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar-top sticky-toolbar d-flex flex-wrap justify-content-between align-items-center mb-3">
+        <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-outline-light active" id="view-grid-btn">Grilla</button>
+            <button type="button" class="btn btn-outline-light" id="view-list-btn">Lista</button>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mt-md-0">
+            <select id="sort-select" class="form-select form-select-sm sort-select">
+                <option value="default">Ordenar...</option>
+                <option value="precio-asc">Precio: menor a mayor</option>
+                <option value="precio-desc">Precio: mayor a menor</option>
+                <option value="codigo-asc">Código A-Z</option>
+                <option value="marca-asc">Marca A-Z</option>
+            </select>
+
+            <div class="form-check form-check-inline text-nowrap">
+                <input class="form-check-input" type="checkbox" id="filter-stock">
+                <label class="form-check-label" for="filter-stock">Solo con stock</label>
+            </div>
+
+            <button class="btn btn-sm btn-outline-warning" id="favorites-only-btn">⭐ Solo favoritos</button>
+
+            <button class="btn btn-sm btn-outline-light" id="toggle-theme">🌙 / ☀️</button>
+        </div>
+    </div>
+    <!-- GRID DE PRODUCTOS -->
+    <div id="productos-grid" class="row g-3">
+
+        {% for p in productos %}
+        <div class="col-12 col-sm-6 col-md-4 product-wrapper"
+             data-id="{{ p.id }}"
+             data-precio="{{ p.precio }}"
+             data-marca="{{ p.marca }}"
+             data-categoria="{{ p.categoria }}"
+             data-stock="{{ p.stock }}"
+             data-codigo="{{ p.codigo }}"
+             data-descripcion="{{ p.descripcion }}">
+
+            <div class="card catalog-card" onclick="abrirModal({{ p.id }})">
+
+                {% if p.imagen_url %}
+                <img src="/static/images/{{ p.imagen_url }}" class="card-img-top" loading="lazy">
+                {% else %}
+                <img src="/static/images/no-image.png" class="card-img-top" loading="lazy">
+                {% endif %}
+
+                <button type="button"
+                        class="favorite-btn"
+                        data-id="{{ p.id }}"
+                        onclick="toggleFavorito(event, {{ p.id }})">
+                    ⭐
+                </button>
+
+                <div class="card-body">
+                    <div class="product-meta mb-1">
+                        {% if p.categoria %}<span>{{ p.categoria }}</span>{% endif %}
+                        {% if p.categoria and p.marca %} · {% endif %}
+                        {% if p.marca %}<span>{{ p.marca }}</span>{% endif %}
+                    </div>
+
+                    <div class="product-code">{{ p.codigo }}</div>
+                    <p class="product-desc mb-2">{{ p.descripcion }}</p>
+
+                    <div class="product-price mb-1">
+                        ${{ '{:,.2f}'.format(p.precio) }}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        {% endfor %}
+
+    </div> <!-- FIN GRID -->
+
+</div> <!-- FIN container-main -->
+
+<!-- 🛒 BOTÓN FLOTANTE CARRITO -->
+<button type="button"
+        class="btn btn-cart-floating"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#offcanvasCarrito">
+    🛒 Pedido
+    <span class="cart-count-badge" id="cart-count">0</span>
+</button>
+
+<!-- 🧾 OFFCANVAS CARRITO -->
+<div class="offcanvas offcanvas-end offcanvas-carrito" tabindex="-1" id="offcanvasCarrito">
+
+  <div class="offcanvas-header position-relative">
+    <h5 class="offcanvas-title">Pedido</h5>
+    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+
+    <button class="btn btn-outline-light btn-sm btn-clear" onclick="limpiarPedido()">
+        Vaciar
+    </button>
+  </div>
+
+  <div class="offcanvas-body d-flex flex-column">
+
+    <!-- COMPRA RÁPIDA -->
+    <div class="mb-3">
+        <label class="form-label mb-1">Compra rápida por código</label>
+        <div class="input-group input-group-sm">
+            <input type="text" id="quick-code" class="form-control" placeholder="Código (ej: VR-150)">
+            <input type="number" id="quick-qty" class="form-control" value="1" min="1" style="max-width:80px;">
+            <button class="btn btn-success" onclick="compraRapida()">Agregar</button>
+        </div>
+    </div>
+
+    <ul id="lista-pedido" class="list-group mb-3 flex-grow-1"></ul>
+
+    <div class="total-box mt-auto">
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+                <div class="total-label">Total estimado</div>
+                <div class="total-value">$<span id="total-pedido">0</span></div>
+            </div>
+        </div>
+
+        <!-- 🔽 NUEVO ORDEN: PDF ARRIBA -->
+        <button class="btn btn-secondary w-100 mb-2" onclick="descargarPDF()">
+            Descargar pedido en PDF
+        </button>
+
+        <button class="btn btn-whatsapp w-100 mb-2" onclick="enviarWhatsApp()">
+            Enviar pedido por WhatsApp
+        </button>
+
+        <button class="btn btn-outline-light w-100" onclick="enviarEmail()">
+            Enviar pedido por Email
+        </button>
+
+    </div>
+
+  </div>
+
+</div>
+<!-- 🔥 MODAL PRODUCTO -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitulo"></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="row g-3">
+
+            <div class="col-md-5">
+                <img id="modalImagen" class="modal-img mb-3">
+            </div>
+
+            <div class="col-md-7">
+
+                <div class="mb-2">
+                    <span class="badge-meta me-2" id="modalMarcaBadge"></span>
+                    <span class="badge-meta" id="modalCategoriaBadge"></span>
+                </div>
+
+                <p id="modalDescripcion"></p>
+
+                <p><strong>Marca:</strong> <span id="modalMarca"></span></p>
+                <p><strong>Categoría:</strong> <span id="modalCategoria"></span></p>
+                <p><strong>Stock:</strong> <span id="modalStock" class="stock-pill stock-gray"></span></p>
+
+                <h4 class="text-success fw-bold">$<span id="modalPrecio"></span></h4>
+
+            </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-success w-100" id="btnAgregar">
+            Agregar al pedido
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- JS BOOTSTRAP -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+let pedido = [];
+let productos = {{ productos_json|tojson }};
+let modal = new bootstrap.Modal(document.getElementById('modalProducto'));
+let offcanvasCarrito = new bootstrap.Offcanvas(document.getElementById('offcanvasCarrito'));
+let nombreEmpresa = "{{ empresa.nombre if empresa else '' }}";
+
+let favorites = new Set(JSON.parse(localStorage.getItem('catalog_favorites') || '[]'));
+let showFavoritesOnly = false;
+let currentView = 'grid';
+let currentCategory = '';
+let searchQuery = '';
+
+const wrappers = Array.from(document.querySelectorAll('.product-wrapper'));
+const gridContainer = document.getElementById('productos-grid');
+
+/* ---------- MODAL PRODUCTO ---------- */
+function abrirModal(id) {
+    let p = productos.find(x => x.id === id);
+
+    if (!p) return;
+
+    document.getElementById("modalTitulo").innerText = p.codigo;
+    document.getElementById("modalDescripcion").innerText = p.descripcion;
+    document.getElementById("modalMarca").innerText = p.marca || "—";
+    document.getElementById("modalCategoria").innerText = p.categoria || "—";
+    document.getElementById("modalPrecio").innerText = p.precio;
+
+    document.getElementById("modalMarcaBadge").innerText = p.marca || "Sin marca";
+    document.getElementById("modalCategoriaBadge").innerText = p.categoria || "Sin categoría";
+
+    // Imagen
+    document.getElementById("modalImagen").src =
+        "/static/images/" + (p.imagen_url || "no-image.png");
+
+    // SEMÁFORO DE STOCK EN MODAL
+    const stockEl = document.getElementById("modalStock");
+    let stockNum = parseInt(p.stock || 0, 10);
+    let clase = "stock-pill ";
+    let texto = "";
+
+    if (isNaN(stockNum) || stockNum <= 0) {
+        clase += "stock-gray";
+        texto = "Sin stock";
+    } else if (stockNum < 5) {
+        clase += "stock-red";
+        texto = "Pocas unidades";
+    } else if (stockNum <= 20) {
+        clase += "stock-yellow";
+        texto = "Stock normal";
+    } else {
+        clase += "stock-green";
+        texto = "Mucho stock";
+    }
+
+    stockEl.className = clase;
+    stockEl.innerText = texto;
+
+    document.getElementById("btnAgregar").onclick = function() {
+        agregarPedido(p.codigo, p.descripcion, p.precio);
+        modal.hide();
+        offcanvasCarrito.show();
+    };
+
+    modal.show();
+}
+/* ---------- PEDIDO / CARRITO ---------- */
+function agregarPedido(codigo, descripcion, precio) {
+    let item = pedido.find(x => x.codigo === codigo);
+    if (item) {
+        item.cantidad++;
+    } else {
+        pedido.push({ codigo, descripcion, precio, cantidad: 1 });
+    }
+    renderPedido();
+}
+
+function cambiarCantidad(i, delta) {
+    pedido[i].cantidad += delta;
+    if (pedido[i].cantidad <= 0) pedido.splice(i, 1);
+    renderPedido();
+}
+
+function limpiarPedido() {
+    pedido = [];
+    renderPedido();
+}
+
+function renderPedido() {
+    const lista = document.getElementById("lista-pedido");
+    const totalEl = document.getElementById("total-pedido");
+    const countEl = document.getElementById("cart-count");
+
+    lista.innerHTML = "";
+    let total = 0;
+    let count = 0;
+
+    pedido.forEach((item, i) => {
+        const subtotal = item.precio * item.cantidad;
+        total += subtotal;
+        count += item.cantidad;
+
+        lista.innerHTML += `
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <div style="font-size:0.85rem; font-weight:500;">
+                        ${item.codigo} – ${item.descripcion}
+                    </div>
+                    <div class="item-subtotal">
+                        $${item.precio} × ${item.cantidad} = $${subtotal.toFixed(2)}
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-light qty-btn" onclick="cambiarCantidad(${i}, -1)">-</button>
+                    <span style="width:20px; text-align:center;">${item.cantidad}</span>
+                    <button class="btn btn-sm btn-outline-light qty-btn" onclick="cambiarCantidad(${i}, 1)">+</button>
+                </div>
+            </li>
+        `;
+    });
+
+    totalEl.innerText = total.toFixed(2);
+    countEl.innerText = count;
+}
+
+/* Compra rápida por código */
+function compraRapida() {
+    const code = document.getElementById('quick-code').value.trim();
+    const qty = parseInt(document.getElementById('quick-qty').value || '1', 10);
+
+    if (!code) {
+        alert("Ingresá un código de producto.");
+        return;
+    }
+    let p = productos.find(x => (x.codigo || "").toLowerCase() === code.toLowerCase());
+    if (!p) {
+        alert("No se encontró un producto con ese código.");
+        return;
+    }
+    for (let i = 0; i < qty; i++) {
+        agregarPedido(p.codigo, p.descripcion, p.precio);
+    }
+    document.getElementById('quick-code').value = "";
+}
+
+/* Enviar por WhatsApp */
+function enviarWhatsApp() {
+    if (pedido.length === 0) {
+        alert("No hay productos en el pedido.");
+        return;
+    }
+
+    let mensaje = nombreEmpresa
+        ? `Pedido de productos – ${nombreEmpresa}:%0A%0A`
+        : "Pedido de productos:%0A%0A";
+
+    let total = 0;
+
+    pedido.forEach(item => {
+        const subtotal = item.precio * item.cantidad;
+        total += subtotal;
+        mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}%0A%0A`;
+    });
+
+    mensaje += `TOTAL: $${total.toFixed(2)}%0A`;
+
+    let numero = "{{ empresa.whatsapp if empresa else '5493510000000' }}";
+    window.open("https://wa.me/" + numero + "?text=" + mensaje, "_blank");
+}
+
+/* Descargar pedido en PDF (llama a /pedido/pdf) */
+function descargarPDF() {
+    if (pedido.length === 0) {
+        alert("No hay productos en el pedido.");
+        return;
+    }
+
+    const data = {
+        empresa: nombreEmpresa,
+        items: pedido
+    };
+
+    fetch("/pedido/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    })
+    .then(resp => {
+        if (!resp.ok) throw new Error("Error generando PDF");
+        return resp.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "pedido.pdf";
+        a.click();
+        window.URL.revokeObjectURL(url);
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Hubo un error al generar el PDF.");
+    });
+}
+
+/* Enviar por Email (mailto: Gmail / Outlook / etc.) */
+function enviarEmail() {
+    if (pedido.length === 0) {
+        alert("No hay productos en el pedido.");
+        return;
+    }
+
+    let asunto = nombreEmpresa
+        ? `Pedido de productos – ${nombreEmpresa}`
+        : "Pedido de productos";
+
+    let cuerpo = nombreEmpresa
+        ? `Pedido de productos – ${nombreEmpresa}\n\n`
+        : "Pedido de productos:\n\n";
+
+    let total = 0;
+
+    pedido.forEach(item => {
+        const subtotal = item.precio * item.cantidad;
+        total += subtotal;
+        cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}\n\n`;
+    });
+
+    cuerpo += `TOTAL: $${total.toFixed(2)}\n`;
+
+    const mailtoLink = "mailto:?subject=" + encodeURIComponent(asunto) +
+                       "&body=" + encodeURIComponent(cuerpo);
+
+    window.location.href = mailtoLink;
+}
+/* ---------- FAVORITOS ---------- */
+function toggleFavorito(event, id) {
+    event.stopPropagation();
+    if (favorites.has(id)) {
+        favorites.delete(id);
+    } else {
+        favorites.add(id);
+    }
+    localStorage.setItem('catalog_favorites', JSON.stringify(Array.from(favorites)));
+    syncFavoritesUI();
+    applyFiltersAndSort();
+}
+
+function syncFavoritesUI() {
+    document.querySelectorAll('.favorite-btn').forEach(btn => {
+        const id = parseInt(btn.dataset.id);
+        btn.classList.toggle('active', favorites.has(id));
+    });
+}
+
+/* ---------- VISTA / ORDEN / FILTROS ---------- */
+function applyFiltersAndSort() {
+    const sortSelect = document.getElementById('sort-select');
+    const onlyStock = document.getElementById('filter-stock').checked;
+
+    let cards = [...wrappers];
+
+    // Filtro categoría
+    if (currentCategory) {
+        cards = cards.filter(w => (w.dataset.categoria || '') === currentCategory);
+    }
+
+    // Filtro favoritos
+    if (showFavoritesOnly) {
+        cards = cards.filter(w => favorites.has(parseInt(w.dataset.id)));
+    }
+
+    // Filtro stock
+    if (onlyStock) {
+        cards = cards.filter(w => parseInt(w.dataset.stock || '0') > 0);
+    }
+
+    // Filtro búsqueda
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        cards = cards.filter(w => {
+            const desc = (w.dataset.descripcion || '').toLowerCase();
+            const cod = (w.dataset.codigo || '').toLowerCase();
+            return desc.includes(q) || cod.includes(q);
+        });
+    }
+
+    // Orden
+    const val = sortSelect.value;
+    if (val === 'precio-asc' || val === 'precio-desc') {
+        cards.sort((a,b) => {
+            const pa = parseFloat(a.dataset.precio || '0');
+            const pb = parseFloat(b.dataset.precio || '0');
+            return val === 'precio-asc' ? pa - pb : pb - pa;
+        });
+    } else if (val === 'codigo-asc') {
+        cards.sort((a,b) => (a.dataset.codigo || '').localeCompare(b.dataset.codigo || ''));
+    } else if (val === 'marca-asc') {
+        cards.sort((a,b) => (a.dataset.marca || '').localeCompare(b.dataset.marca || ''));
+    }
+
+    // Re-pintar DOM
+    gridContainer.innerHTML = "";
+    cards.forEach(w => gridContainer.appendChild(w));
+
+    // Vista actual
+    cards.forEach(w => {
+        const card = w.querySelector('.catalog-card');
+
+        if (currentView === 'grid') {
+            w.className = 'col-12 col-sm-6 col-md-4 product-wrapper';
+            card.classList.remove('list-view');
+        } else {
+            w.className = 'col-12 product-wrapper';
+            card.classList.add('list-view');
+        }
+    });
+}
+
+/* ---------- INIT UX ---------- */
+document.addEventListener('DOMContentLoaded', () => {
+
+    // Categorías
+    document.querySelectorAll('.category-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.category-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentCategory = btn.dataset.cat || '';
+            applyFiltersAndSort();
+        });
+    });
+
+    // Búsqueda instantánea
+    const searchInput = document.getElementById('search-input');
+    const searchBtn = document.getElementById('search-btn');
+
+    searchInput.addEventListener('input', () => {
+        searchQuery = searchInput.value.trim();
+        applyFiltersAndSort();
+    });
+
+    searchBtn.addEventListener('click', () => {
+        searchQuery = searchInput.value.trim();
+        applyFiltersAndSort();
+    });
+
+    // Vista grid
+    document.getElementById('view-grid-btn').addEventListener('click', () => {
+        currentView = 'grid';
+        document.getElementById('view-grid-btn').classList.add('active');
+        document.getElementById('view-list-btn').classList.remove('active');
+        applyFiltersAndSort();
+    });
+
+    // Vista lista
+    document.getElementById('view-list-btn').addEventListener('click', () => {
+        currentView = 'list';
+        document.getElementById('view-list-btn').classList.add('active');
+        document.getElementById('view-grid-btn').classList.remove('active');
+        applyFiltersAndSort();
+    });
+
+    // Orden
+    document.getElementById('sort-select').addEventListener('change', applyFiltersAndSort);
+
+    // Solo stock
+    document.getElementById('filter-stock').addEventListener('change', applyFiltersAndSort);
+
+    // Solo favoritos
+    document.getElementById('favorites-only-btn').addEventListener('click', () => {
+        showFavoritesOnly = !showFavoritesOnly;
+        document.getElementById('favorites-only-btn').classList.toggle('btn-warning', showFavoritesOnly);
+        applyFiltersAndSort();
+    });
+
+    // Tema claro / oscuro
+    document.getElementById('toggle-theme').addEventListener('click', () => {
+        document.body.classList.toggle('light-mode');
+    });
+
+    // iniciar
+    syncFavoritesUI();
+    applyFiltersAndSort();
+});
+</script>
+
+</body>
+</html>
+
+
+
+
+
