@@ -296,7 +296,9 @@ async def generar_pdf(data: dict):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=pedido.pdf"}
     )
-    # ---------------------------------------------------
+
+
+# ---------------------------------------------------
 # CREAR EMPRESA
 # ---------------------------------------------------
 @app.post("/empresa/crear")
@@ -328,6 +330,7 @@ def crear_empresa(data: dict, db: Session = Depends(get_db)):
         "empresa_id": empresa.id,
         "slug": empresa.slug
     }
+
 
 # ---------------------------------------------------
 # LISTAR EMPRESAS (DEBUG)
