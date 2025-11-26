@@ -329,4 +329,19 @@ def crear_empresa(data: dict, db: Session = Depends(get_db)):
         "slug": empresa.slug
     }
 
+# ---------------------------------------------------
+# LISTAR EMPRESAS (DEBUG)
+# ---------------------------------------------------
+@app.get("/debug/empresas")
+def listar_empresas(db: Session = Depends(get_db)):
+    empresas = db.query(models.Empresa).all()
+    return [
+        {
+            "id": e.id,
+            "nombre": e.nombre,
+            "slug": e.slug,
+            "whatsapp": e.whatsapp
+        }
+        for e in empresas
+    ]
 
