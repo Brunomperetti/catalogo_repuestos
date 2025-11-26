@@ -296,4 +296,37 @@ async def generar_pdf(data: dict):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=pedido.pdf"}
     )
+    # ---------------------------------------------------
+# CREAR EMPRESA
+# ---------------------------------------------------
+@app.post("/empresa/crear")
+def crear_empresa(data: dict, db: Session = Depends(get_db)):
+
+    nombre = data.get("nombre")
+    slug = data.get("slug")
+    whatsapp = data.get("whatsapp", "")
+
+    if not nombre or not slug:
+        return {"error": "nombre y slug son obligatorios"}
+
+    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if existe:
+        return {"error": "Ya existe una empresa con ese slug"}
+
+    empresa = models.Empresa(
+        nombre=nombre,
+        slug=slug,
+        whatsapp=whatsapp
+    )
+
+    db.add(empresa)
+    db.commit()
+    db.refresh(empresa)
+
+    return {
+        "status": "ok",
+        "empresa_id": empresa.id,
+        "slug": empresa.slug
+    }
+
 
