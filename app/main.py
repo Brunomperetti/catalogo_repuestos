@@ -1,6 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse   # >>> AGREGADO PARA PDF <<<
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
@@ -10,13 +9,12 @@ import shutil
 import os
 from urllib.parse import quote
 
-# >>> AGREGADO PARA PDF <<<
+# PDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from io import BytesIO
-# >>> FIN AGREGADO <<<
 
-from app.database import engine, Base, get_db
+from app.database import SessionLocal, engine, Base
 from app import models
 from fastapi.templating import Jinja2Templates
 
@@ -25,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# STATIC
+# Static
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Templates
@@ -34,13 +32,22 @@ templates = Jinja2Templates(directory="app/templates")
 IMAGES_PATH = "app/static/images/"
 
 
-# ░░░░░ HOME (PANEL) ░░░░░
+# ---------------------------------------------------
+# DB Dependency
+# ---------------------------------------------------
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------
+# HOME PANEL
+# ---------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def upload_view(
-    request: Request,
-    msg: str = "",
-    error: str = "",
-):
+def upload_view(request: Request, msg: str = "", error: str = ""):
     return templates.TemplateResponse(
         "upload.html",
         {
@@ -51,7 +58,9 @@ def upload_view(
     )
 
 
-# ░░░░░ SUBIR EXCEL ░░░░░
+# ---------------------------------------------------
+# SUBIR EXCEL
+# ---------------------------------------------------
 @app.post("/upload_excel")
 def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
@@ -79,12 +88,17 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             ).first()
 
             imagen_archivo = f"{codigo}.jpg"
-            imagen_url = imagen_archivo if os.path.exists(os.path.join(IMAGES_PATH, imagen_archivo)) else ""
+            imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
+            imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
 
             if existe:
                 existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
-                existe.categoria = str(row.get("categoria", "")) if "categoria" in df.columns else existe.categoria
-                existe.marca = str(row.get("marca", "")) if "marca" in df.columns else existe.marca
+                existe.categoria = (
+                    str(row.get("categoria", "")) if "categoria" in df.columns else existe.categoria
+                )
+                existe.marca = (
+                    str(row.get("marca", "")) if "marca" in df.columns else existe.marca
+                )
                 existe.precio = float(row.get("precio", existe.precio or 0))
 
                 if "stock" in df.columns:
@@ -104,7 +118,7 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
                     try:
                         stock_val = int(row.get("stock", 0))
                     except Exception:
-                        stock_val = 0
+                        pass
 
                 producto = models.Producto(
                     empresa_id=1,
@@ -116,21 +130,24 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
                     stock=stock_val,
                     imagen_url=imagen_url,
                 )
+
                 db.add(producto)
                 nuevos += 1
 
         db.commit()
 
-        msg = quote(f"Excel procesado con éxito. Nuevos: {nuevos} | Actualizados: {actualizados}")
+        msg = quote(f"Excel procesado. Nuevos: {nuevos} | Actualizados: {actualizados}")
         return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
     except Exception as e:
-        print("Error al procesar Excel:", e)
-        msg = quote("Error de conexión al enviar el Excel.")
+        print("Error Excel:", e)
+        msg = quote("Error procesando el archivo.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
 
-# ░░░░░ SUBIR ZIP ░░░░░
+# ---------------------------------------------------
+# SUBIR ZIP DE IMÁGENES
+# ---------------------------------------------------
 @app.post("/upload_zip")
 def upload_zip(file: UploadFile = File(...)):
 
@@ -145,39 +162,39 @@ def upload_zip(file: UploadFile = File(...)):
 
         os.remove(temp_path)
 
-        msg = quote("Imágenes cargadas correctamente. Se usarán por código (ej: VR-150.jpg).")
+        msg = quote("Imágenes cargadas correctamente.")
         return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
     except Exception as e:
-        print("Error al procesar ZIP:", e)
-        msg = quote("Error al procesar el ZIP de imágenes.")
+        print("Error ZIP:", e)
+        msg = quote("Error al procesar el ZIP.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
 
-# ░░░░░ BORRAR TODOS ░░░░░
+# ---------------------------------------------------
+# BORRAR TODOS LOS PRODUCTOS
+# ---------------------------------------------------
 @app.post("/delete_all_products")
 def delete_all_products(db: Session = Depends(get_db)):
 
     try:
         db.query(models.Producto).delete()
         db.commit()
-        msg = quote("Todos los productos fueron eliminados correctamente.")
+
+        msg = quote("Productos eliminados.")
         return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
     except Exception as e:
-        print("Error al borrar productos:", e)
-        msg = quote("Error al borrar los productos.")
+        print("Error borrando:", e)
+        msg = quote("Error al borrar productos.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
 
-# ░░░░░ CATÁLOGO ░░░░░
+# ---------------------------------------------------
+# CATÁLOGO
+# ---------------------------------------------------
 @app.get("/catalogo/{slug}", response_class=HTMLResponse)
-def catalogo(
-    slug: str,
-    request: Request,
-    q: str = "",
-    categoria: str = "",
-    db: Session = Depends(get_db),
-):
+def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: Session = Depends(get_db)):
 
     empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if not empresa:
@@ -200,7 +217,7 @@ def catalogo(
         .all()
     )
 
-    categorias: List[str] = sorted([c[0] for c in categorias_raw if c[0]])
+    categorias = sorted([c[0] for c in categorias_raw if c[0]])
 
     productos_json = [
         {
@@ -230,8 +247,9 @@ def catalogo(
     )
 
 
-# ░░░░░ GENERAR PDF DEL PEDIDO (CORREGIDO) ░░░░░
-# >>> AGREGADO PARA PDF <<<
+# ---------------------------------------------------
+# PDF DEL PEDIDO
+# ---------------------------------------------------
 @app.post("/pedido/pdf")
 async def generar_pdf(data: dict):
 
@@ -245,22 +263,21 @@ async def generar_pdf(data: dict):
     y = height - 40
 
     c.setFont("Helvetica-Bold", 18)
-    c.drawString(40, y, f"{empresa}")
+    c.drawString(40, y, empresa)
     y -= 40
 
     c.setFont("Helvetica", 11)
     total = 0
 
     for item in items:
-        linea = f'{item["cantidad"]}x  {item["codigo"]}  -  {item["descripcion"]}'
-        c.drawString(40, y, linea)
+        c.drawString(40, y, f'{item["cantidad"]}x {item["codigo"]} - {item["descripcion"]}')
         y -= 18
 
-        precio_linea = f'Precio: ${item["precio"]:.2f}   Subtotal: ${item["precio"] * item["cantidad"]:.2f}'
-        c.drawString(60, y, precio_linea)
+        subtotal = item["precio"] * item["cantidad"]
+        c.drawString(60, y, f'Precio: ${item["precio"]:.2f} - Subtotal: ${subtotal:.2f}')
         y -= 22
 
-        total += item["precio"] * item["cantidad"]
+        total += subtotal
 
         if y < 60:
             c.showPage()
@@ -279,4 +296,4 @@ async def generar_pdf(data: dict):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=pedido.pdf"}
     )
-# >>> FIN AGREGADO <<<
+
