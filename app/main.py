@@ -241,6 +241,11 @@ def upload_view(request: Request, msg: str = "", error: str = ""):
 def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
     try:
+        empresa = get_empresa_activa(db)
+        if not empresa:
+            msg = quote("No hay empresa activa. Creá una empresa primero.")
+            return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
         df = pd.read_excel(file.file)
         df.columns = [c.strip().lower() for c in df.columns]
 
@@ -260,7 +265,7 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
             existe = db.query(models.Producto).filter(
                 models.Producto.codigo == codigo,
-                models.Producto.empresa_id == 1,
+                models.Producto.empresa_id == empresa.id,
             ).first()
 
             imagen_archivo = f"{codigo}.jpg"
@@ -297,7 +302,7 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
                         pass
 
                 producto = models.Producto(
-                    empresa_id=1,
+                     empresa_id=empresa.id,
                     codigo=codigo,
                     descripcion=str(row.get("descripcion", "")),
                     categoria=str(row.get("categoria", "")) if "categoria" in df.columns else "",
