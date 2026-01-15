@@ -18,15 +18,25 @@ from app.database import SessionLocal, engine, Base
 from app import models
 from fastapi.templating import Jinja2Templates
 
-# Crear tablas
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# Static
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# ---------------------------------------------------
+# STARTUP EVENT (CLAVE PARA RENDER)
+# ---------------------------------------------------
+@app.on_event("startup")
+def on_startup():
+    """
+    Se ejecuta cuando la app YA levantó y el puerto está abierto.
+    Acá recién tocamos la base.
+    """
+    Base.metadata.create_all(bind=engine)
 
-# Templates
+
+# ---------------------------------------------------
+# Static & Templates
+# ---------------------------------------------------
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 IMAGES_PATH = "app/static/images/"
