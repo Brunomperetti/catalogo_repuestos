@@ -41,6 +41,84 @@ templates = Jinja2Templates(directory="app/templates")
 
 IMAGES_PATH = "app/static/images/"
 
+from fastapi import Form
+from fastapi.responses import JSONResponse
+
+EMPRESAS_STATIC_DIR = "app/static/empresas"
+
+
+def ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
+def save_upload_file(upload_file: UploadFile, dest_path: str):
+    # guarda el archivo subido en disco
+    with open(dest_path, "wb") as f:
+        shutil.copyfileobj(upload_file.file, f)
+
+
+@app.post("/empresa/crear_panel")
+def crear_empresa_panel(
+    nombre: str = Form(...),
+    slug: str = Form(...),
+    whatsapp: str = Form(""),
+    logo: UploadFile = File(None),
+    banner: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Crea una empresa y opcionalmente guarda logo + banner en:
+    app/static/empresas/<slug>/logo.<ext>
+    app/static/empresas/<slug>/banner.<ext>
+    """
+    nombre = (nombre or "").strip()
+    slug = (slug or "").strip().lower()
+    whatsapp = (whatsapp or "").strip()
+
+    if not nombre or not slug:
+        return JSONResponse({"error": "nombre y slug son obligatorios"}, status_code=400)
+
+    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if existe:
+        return JSONResponse({"error": "Ya existe una empresa con ese slug"}, status_code=400)
+
+    # crear empresa en DB
+    empresa = models.Empresa(nombre=nombre, slug=slug, whatsapp=whatsapp)
+    db.add(empresa)
+    db.commit()
+    db.refresh(empresa)
+
+    # carpeta por empresa
+    empresa_dir = os.path.join(EMPRESAS_STATIC_DIR, slug)
+    ensure_dir(empresa_dir)
+
+    # guardar logo
+    if logo is not None:
+        ext = os.path.splitext(logo.filename or "")[1].lower() or ".png"
+        logo_path = os.path.join(empresa_dir, f"logo{ext}")
+        save_upload_file(logo, logo_path)
+
+        # si tu modelo tiene campos, guardamos la ruta relativa para usar en templates
+        if hasattr(empresa, "logo_url"):
+            empresa.logo_url = f"empresas/{slug}/logo{ext}"
+
+    # guardar banner
+    if banner is not None:
+        ext = os.path.splitext(banner.filename or "")[1].lower() or ".jpg"
+        banner_path = os.path.join(empresa_dir, f"banner{ext}")
+        save_upload_file(banner, banner_path)
+
+        if hasattr(empresa, "banner_url"):
+            empresa.banner_url = f"empresas/{slug}/banner{ext}"
+
+    db.commit()
+
+    return {
+        "status": "ok",
+        "empresa_id": empresa.id,
+        "slug": empresa.slug,
+        "catalogo_url": f"/catalogo/{empresa.slug}",
+    }
 
 # ---------------------------------------------------
 # DB Dependency
