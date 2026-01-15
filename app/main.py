@@ -60,6 +60,21 @@ def get_db():
         db.close()
 
 # ---------------------------------------------------
+# EMPRESA ACTIVA (helper)
+# ---------------------------------------------------
+
+def get_empresa_activa(db: Session):
+    """
+    Devuelve la última empresa creada (empresa activa)
+    """
+    return (
+        db.query(models.Empresa)
+        .order_by(models.Empresa.id.desc())
+        .first()
+    )
+        
+
+# ---------------------------------------------------
 # CREAR EMPRESA DESDE PANEL + ACTIVARLA
 # ---------------------------------------------------
 from fastapi import Form
