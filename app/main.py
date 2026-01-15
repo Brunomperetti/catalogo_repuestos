@@ -22,6 +22,12 @@ from fastapi.templating import Jinja2Templates
 app = FastAPI()
 
 # ---------------------------------------------------
+# EMPRESA ACTIVA (MVP)
+# ---------------------------------------------------
+EMPRESA_ACTIVA_ID = None
+
+
+# ---------------------------------------------------
 # STARTUP EVENT (CLAVE PARA RENDER)
 # ---------------------------------------------------
 @app.on_event("startup")
