@@ -41,6 +41,18 @@ templates = Jinja2Templates(directory="app/templates")
 
 IMAGES_PATH = "app/static/images/"
 
+
+
+# ---------------------------------------------------
+# DB Dependency
+# ---------------------------------------------------
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 from fastapi import Form
 from fastapi.responses import JSONResponse
 
@@ -119,18 +131,6 @@ def crear_empresa_panel(
         "slug": empresa.slug,
         "catalogo_url": f"/catalogo/{empresa.slug}",
     }
-
-# ---------------------------------------------------
-# DB Dependency
-# ---------------------------------------------------
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 # ---------------------------------------------------
 # HOME PANEL
 # ---------------------------------------------------
