@@ -59,6 +59,73 @@ def get_db():
     finally:
         db.close()
 
+# ---------------------------------------------------
+# CREAR EMPRESA DESDE PANEL + ACTIVARLA
+# ---------------------------------------------------
+from fastapi import Form
+
+@app.post("/empresa/crear_panel")
+def crear_empresa_panel(
+    nombre: str = Form(...),
+    slug: str = Form(...),
+    whatsapp: str = Form(""),
+    logo: UploadFile = File(None),
+    banner: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    global EMPRESA_ACTIVA_ID
+
+    nombre = nombre.strip()
+    slug = slug.strip().lower()
+    whatsapp = whatsapp.strip()
+
+    if not nombre or not slug:
+        return RedirectResponse(
+            url="/?error=Faltan datos obligatorios",
+            status_code=303
+        )
+
+    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if existe:
+        return RedirectResponse(
+            url="/?error=El slug ya existe",
+            status_code=303
+        )
+
+    # Crear empresa
+    empresa = models.Empresa(
+        nombre=nombre,
+        slug=slug,
+        whatsapp=whatsapp
+    )
+
+    db.add(empresa)
+    db.commit()
+    db.refresh(empresa)
+
+    # Crear carpeta de la empresa
+    empresa_path = f"app/static/empresas/{empresa.id}"
+    os.makedirs(empresa_path, exist_ok=True)
+
+    # Guardar logo
+    if logo:
+        logo_path = f"{empresa_path}/logo.png"
+        with open(logo_path, "wb") as f:
+            shutil.copyfileobj(logo.file, f)
+
+    # Guardar banner
+    if banner:
+        banner_path = f"{empresa_path}/banner.png"
+        with open(banner_path, "wb") as f:
+            shutil.copyfileobj(banner.file, f)
+
+    # 👉 ACTIVAR EMPRESA
+    EMPRESA_ACTIVA_ID = empresa.id
+
+    msg = quote(f"Empresa creada y activada: {empresa.nombre}")
+    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
+
 from fastapi import Form
 from fastapi.responses import JSONResponse
 
