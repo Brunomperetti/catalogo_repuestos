@@ -584,3 +584,17 @@ def listar_empresas(db: Session = Depends(get_db)):
         for e in empresas
     ]
 
+# ---------------------------------------------------
+# BORRAR EMPRESA (USO ADMIN / TEMPORAL)
+# ---------------------------------------------------
+@app.post("/empresa/borrar/{empresa_id}")
+def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
+
+    if not empresa:
+        return {"error": "Empresa no encontrada"}
+
+    db.delete(empresa)
+    db.commit()
+
+    return {"status": "ok", "deleted_id": empresa_id}
