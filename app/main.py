@@ -45,7 +45,8 @@ def on_startup():
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-IMAGES_PATH = "app/static/images/"
+IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
+os.makedirs(IMAGES_PATH, exist_ok=True)
 
 
 
@@ -318,10 +319,12 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             if not codigo:
                 continue
 
-            existe = db.query(models.Producto).filter(
-                models.Producto.codigo == codigo,
-                models.Producto.empresa_id == empresa.id,
-            ).first()
+            empresa = get_empresa_activa(db)
+
+            if not empresa:
+                msg = quote("No hay empresa activa.")
+                return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
 
             imagen_archivo = f"{codigo}.jpg"
             imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
@@ -382,16 +385,24 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------
-# SUBIR ZIP DE IMÁGENES
+# SUBIR ZIP DE IMÁGENES (MULTIEMPRESA)
 # ---------------------------------------------------
 @app.post("/upload_zip")
-def upload_zip(file: UploadFile = File(...)):
+def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
     try:
         temp_path = "temp_images.zip"
 
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+
+        empresa = get_empresa_activa(db)
+        if not empresa:
+            msg = quote("No hay empresa activa.")
+            return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
+        IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
+        os.makedirs(IMAGES_PATH, exist_ok=True)
 
         with zipfile.ZipFile(temp_path, "r") as zip_ref:
             zip_ref.extractall(IMAGES_PATH)
@@ -405,6 +416,7 @@ def upload_zip(file: UploadFile = File(...)):
         print("Error ZIP:", e)
         msg = quote("Error al procesar el ZIP.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
 
 
 # ---------------------------------------------------
