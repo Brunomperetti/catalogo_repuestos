@@ -45,8 +45,7 @@ def on_startup():
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
-os.makedirs(IMAGES_PATH, exist_ok=True)
+
 
 
 
@@ -299,89 +298,59 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
     try:
         empresa = get_empresa_activa(db)
         if not empresa:
-            msg = quote("No hay empresa activa. Creá una empresa primero.")
-            return RedirectResponse(url=f"/?error={msg}", status_code=303)
+    msg = quote("No hay empresa activa. Creá una empresa primero.")
+    return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
-        df = pd.read_excel(file.file)
-        df.columns = [c.strip().lower() for c in df.columns]
+IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
+os.makedirs(IMAGES_PATH, exist_ok=True)
 
-        required = ["codigo", "descripcion", "precio"]
-        for col in required:
-            if col not in df.columns:
-                msg = quote(f"Falta columna obligatoria: {col}")
-                return RedirectResponse(url=f"/?error={msg}", status_code=303)
+df = pd.read_excel(file.file)
+df.columns = [c.strip().lower() for c in df.columns]
 
-        nuevos = 0
-        actualizados = 0
-
-        for _, row in df.iterrows():
-            codigo = str(row.get("codigo", "")).strip()
-            if not codigo:
-                continue
-
-            empresa = get_empresa_activa(db)
-
-            if not empresa:
-                msg = quote("No hay empresa activa.")
-                return RedirectResponse(url=f"/?error={msg}", status_code=303)
-
-
-            imagen_archivo = f"{codigo}.jpg"
-            imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
-            imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
-
-            if existe:
-                existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
-                existe.categoria = (
-                    str(row.get("categoria", "")) if "categoria" in df.columns else existe.categoria
-                )
-                existe.marca = (
-                    str(row.get("marca", "")) if "marca" in df.columns else existe.marca
-                )
-                existe.precio = float(row.get("precio", existe.precio or 0))
-
-                if "stock" in df.columns:
-                    try:
-                        existe.stock = int(row.get("stock", existe.stock or 0))
-                    except Exception:
-                        pass
-
-                if imagen_url:
-                    existe.imagen_url = imagen_url
-
-                actualizados += 1
-
-            else:
-                stock_val = 0
-                if "stock" in df.columns:
-                    try:
-                        stock_val = int(row.get("stock", 0))
-                    except Exception:
-                        pass
-
-                producto = models.Producto(
-                     empresa_id=empresa.id,
-                    codigo=codigo,
-                    descripcion=str(row.get("descripcion", "")),
-                    categoria=str(row.get("categoria", "")) if "categoria" in df.columns else "",
-                    marca=str(row.get("marca", "")) if "marca" in df.columns else "",
-                    precio=float(row.get("precio", 0)),
-                    stock=stock_val,
-                    imagen_url=imagen_url,
-                )
-
-                db.add(producto)
-                nuevos += 1
-
-        db.commit()
-
-        msg = quote(f"Excel procesado. Nuevos: {nuevos} | Actualizados: {actualizados}")
-        return RedirectResponse(url=f"/?msg={msg}", status_code=303)
-
-    except Exception as e:
-        print("Error Excel:", e)
-        msg = quote("Error procesando el archivo.")
+required = ["codigo", "descripcion", "precio"]
+for col in required:
+    if col not in df.columns:
+        msg = quote(f"Falta columna obligatoria: {col}")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
+nuevos = 0
+actualizados = 0
+
+for _, row in df.iterrows():
+    codigo = str(row.get("codigo", "")).strip()
+    if not codigo:
+        continue
+
+    existe = db.query(models.Producto).filter(
+        models.Producto.codigo == codigo,
+        models.Producto.empresa_id == empresa.id
+    ).first()
+
+    imagen_archivo = f"{codigo}.jpg"
+    imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
+    imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
+
+    if existe:
+        existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
+        existe.precio = float(row.get("precio", existe.precio))
+        existe.imagen = imagen_url or existe.imagen
+        actualizados += 1
+    else:
+        producto = models.Producto(
+            codigo=codigo,
+            descripcion=str(row.get("descripcion", "")),
+            precio=float(row.get("precio", 0)),
+            imagen=imagen_url,
+            empresa_id=empresa.id
+        )
+        db.add(producto)
+        nuevos += 1
+
+db.commit()
+
+msg = quote(f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}")
+return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
 
 
 # ---------------------------------------------------
