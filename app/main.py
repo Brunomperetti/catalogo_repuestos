@@ -75,7 +75,6 @@ def get_empresa_activa(db: Session):
 
 from fastapi import Form, UploadFile
 from pathlib import Path
-
 @app.post("/empresa/crear_panel")
 async def crear_empresa_panel(
     nombre: str = Form(...),
@@ -85,48 +84,48 @@ async def crear_empresa_panel(
     banner: UploadFile = None,
     db: Session = Depends(get_db)
 ):
-
     import re
+    from pathlib import Path
 
-slug = slug.strip().lower()
-slug = re.sub(r"[^a-z0-9\-]", "-", slug)
-slug = re.sub(r"-+", "-", slug)
+    slug = slug.strip().lower()
+    slug = re.sub(r"[^a-z0-9\-]", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
 
-    # validar slug único
     existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if existe:
-        return RedirectResponse(url="/?error=La empresa ya existe", status_code=303)
+        return RedirectResponse(
+            url="/?error=La empresa ya existe",
+            status_code=303
+        )
 
     empresa = models.Empresa(
-    nombre=nombre.strip(),
-    slug=slug,
-    whatsapp=whatsapp.strip()
-)
+        nombre=nombre.strip(),
+        slug=slug,
+        whatsapp=whatsapp.strip()
+    )
 
     db.add(empresa)
     db.commit()
     db.refresh(empresa)
 
-    # crear carpeta empresa
     base_path = Path("app/static/empresas") / empresa.slug
     productos_path = base_path / "productos"
     base_path.mkdir(parents=True, exist_ok=True)
     productos_path.mkdir(exist_ok=True)
 
-    # guardar logo
     if logo:
         with open(base_path / "logo.png", "wb") as f:
             f.write(await logo.read())
 
-    # guardar banner
     if banner:
         with open(base_path / "banner.jpg", "wb") as f:
             f.write(await banner.read())
 
     return RedirectResponse(
-        url="/?msg=Empresa creada y activa correctamente",
+        url="/?msg=Empresa creada correctamente",
         status_code=303
     )
+
 
         
 
