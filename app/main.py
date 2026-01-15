@@ -1,53 +1,39 @@
-from fastapi import FastAPI, UploadFile, File, Depends, Request
+from fastapi import FastAPI, UploadFile, File, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List
 import pandas as pd
 import zipfile
 import shutil
 import os
+import re
 from urllib.parse import quote
+from pathlib import Path
+from io import BytesIO
 
 # PDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from io import BytesIO
 
 from app.database import SessionLocal, engine, Base
 from app import models
-from fastapi.templating import Jinja2Templates
-
 
 app = FastAPI()
 
 # ---------------------------------------------------
-# EMPRESA ACTIVA (MVP)
-# ---------------------------------------------------
-EMPRESA_ACTIVA_ID = None
-
-
-# ---------------------------------------------------
-# STARTUP EVENT (CLAVE PARA RENDER)
+# STARTUP (Render-safe)
 # ---------------------------------------------------
 @app.on_event("startup")
 def on_startup():
-    """
-    Se ejecuta cuando la app YA levantó y el puerto está abierto.
-    Acá recién tocamos la base.
-    """
     Base.metadata.create_all(bind=engine)
-
 
 # ---------------------------------------------------
 # Static & Templates
 # ---------------------------------------------------
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
-
-
-
-
 
 # ---------------------------------------------------
 # DB Dependency
@@ -60,50 +46,58 @@ def get_db():
         db.close()
 
 # ---------------------------------------------------
-# EMPRESA ACTIVA (helper)
+# Empresa activa (última creada)
 # ---------------------------------------------------
-
 def get_empresa_activa(db: Session):
-    """
-    Devuelve la última empresa creada (empresa activa)
-    """
     return (
         db.query(models.Empresa)
         .order_by(models.Empresa.id.desc())
         .first()
     )
 
-from fastapi import Form, UploadFile
-from pathlib import Path
+# ---------------------------------------------------
+# HOME PANEL
+# ---------------------------------------------------
+@app.get("/", response_class=HTMLResponse)
+def upload_view(request: Request, msg: str = "", error: str = ""):
+    return templates.TemplateResponse(
+        "upload.html",
+        {
+            "request": request,
+            "msg": msg,
+            "error": error,
+        },
+    )
+
+# ---------------------------------------------------
+# CREAR EMPRESA (ÚNICO ENDPOINT)
+# ---------------------------------------------------
 @app.post("/empresa/crear_panel")
 async def crear_empresa_panel(
     nombre: str = Form(...),
     slug: str = Form(...),
     whatsapp: str = Form(""),
-    logo: UploadFile = None,
-    banner: UploadFile = None,
-    db: Session = Depends(get_db)
+    logo: UploadFile = File(None),
+    banner: UploadFile = File(None),
+    db: Session = Depends(get_db),
 ):
-    import re
-    from pathlib import Path
-
+    nombre = nombre.strip()
     slug = slug.strip().lower()
     slug = re.sub(r"[^a-z0-9\-]", "-", slug)
     slug = re.sub(r"-+", "-", slug)
 
+    if not nombre or not slug:
+        return RedirectResponse(url="/?error=Datos incompletos", status_code=303)
+
     existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if existe:
-        return RedirectResponse(
-            url="/?error=La empresa ya existe",
-            status_code=303
-        )
+        return RedirectResponse(url="/?error=La empresa ya existe", status_code=303)
 
     empresa = models.Empresa(
-        nombre=nombre.strip(),
+        nombre=nombre,
         slug=slug,
         whatsapp=whatsapp.strip()
     )
-
     db.add(empresa)
     db.commit()
     db.refresh(empresa)
@@ -125,171 +119,7 @@ async def crear_empresa_panel(
         url="/?msg=Empresa creada correctamente",
         status_code=303
     )
-
-
-        
-
-# ---------------------------------------------------
-# CREAR EMPRESA DESDE PANEL + ACTIVARLA
-# ---------------------------------------------------
-from fastapi import Form
-
-@app.post("/empresa/crear_panel")
-def crear_empresa_panel(
-    nombre: str = Form(...),
-    slug: str = Form(...),
-    whatsapp: str = Form(""),
-    logo: UploadFile = File(None),
-    banner: UploadFile = File(None),
-    db: Session = Depends(get_db),
-):
-    global EMPRESA_ACTIVA_ID
-
-    nombre = nombre.strip()
-    slug = slug.strip().lower()
-    whatsapp = whatsapp.strip()
-
-    if not nombre or not slug:
-        return RedirectResponse(
-            url="/?error=Faltan datos obligatorios",
-            status_code=303
-        )
-
-    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
-    if existe:
-        return RedirectResponse(
-            url="/?error=El slug ya existe",
-            status_code=303
-        )
-
-    # Crear empresa
-    empresa = models.Empresa(
-        nombre=nombre,
-        slug=slug,
-        whatsapp=whatsapp
-    )
-
-    db.add(empresa)
-    db.commit()
-    db.refresh(empresa)
-
-    # Crear carpeta de la empresa
-    empresa_path = f"app/static/empresas/{empresa.id}"
-    os.makedirs(empresa_path, exist_ok=True)
-
-    # Guardar logo
-    if logo:
-        logo_path = f"{empresa_path}/logo.png"
-        with open(logo_path, "wb") as f:
-            shutil.copyfileobj(logo.file, f)
-
-    # Guardar banner
-    if banner:
-        banner_path = f"{empresa_path}/banner.png"
-        with open(banner_path, "wb") as f:
-            shutil.copyfileobj(banner.file, f)
-
-    # 👉 ACTIVAR EMPRESA
-    EMPRESA_ACTIVA_ID = empresa.id
-
-    msg = quote(f"Empresa creada y activada: {empresa.nombre}")
-    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
-
-
-from fastapi import Form
-from fastapi.responses import JSONResponse
-
-EMPRESAS_STATIC_DIR = "app/static/empresas"
-
-
-def ensure_dir(path: str):
-    os.makedirs(path, exist_ok=True)
-
-
-def save_upload_file(upload_file: UploadFile, dest_path: str):
-    # guarda el archivo subido en disco
-    with open(dest_path, "wb") as f:
-        shutil.copyfileobj(upload_file.file, f)
-
-
-@app.post("/empresa/crear_panel")
-def crear_empresa_panel(
-    nombre: str = Form(...),
-    slug: str = Form(...),
-    whatsapp: str = Form(""),
-    logo: UploadFile = File(None),
-    banner: UploadFile = File(None),
-    db: Session = Depends(get_db),
-):
-    """
-    Crea una empresa y opcionalmente guarda logo + banner en:
-    app/static/empresas/<slug>/logo.<ext>
-    app/static/empresas/<slug>/banner.<ext>
-    """
-    nombre = (nombre or "").strip()
-    slug = (slug or "").strip().lower()
-    whatsapp = (whatsapp or "").strip()
-
-    if not nombre or not slug:
-        return JSONResponse({"error": "nombre y slug son obligatorios"}, status_code=400)
-
-    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
-    if existe:
-        return JSONResponse({"error": "Ya existe una empresa con ese slug"}, status_code=400)
-
-    # crear empresa en DB
-    empresa = models.Empresa(nombre=nombre, slug=slug, whatsapp=whatsapp)
-    db.add(empresa)
-    db.commit()
-    db.refresh(empresa)
-
-    # carpeta por empresa
-    empresa_dir = os.path.join(EMPRESAS_STATIC_DIR, slug)
-    ensure_dir(empresa_dir)
-
-    # guardar logo
-    if logo is not None:
-        ext = os.path.splitext(logo.filename or "")[1].lower() or ".png"
-        logo_path = os.path.join(empresa_dir, f"logo{ext}")
-        save_upload_file(logo, logo_path)
-
-        # si tu modelo tiene campos, guardamos la ruta relativa para usar en templates
-        if hasattr(empresa, "logo_url"):
-            empresa.logo_url = f"empresas/{slug}/logo{ext}"
-
-    # guardar banner
-    if banner is not None:
-        ext = os.path.splitext(banner.filename or "")[1].lower() or ".jpg"
-        banner_path = os.path.join(empresa_dir, f"banner{ext}")
-        save_upload_file(banner, banner_path)
-
-        if hasattr(empresa, "banner_url"):
-            empresa.banner_url = f"empresas/{slug}/banner{ext}"
-
-    db.commit()
-
-    return {
-        "status": "ok",
-        "empresa_id": empresa.id,
-        "slug": empresa.slug,
-        "catalogo_url": f"/catalogo/{empresa.slug}",
-    }
-# ---------------------------------------------------
-# HOME PANEL
-# ---------------------------------------------------
-@app.get("/", response_class=HTMLResponse)
-def upload_view(request: Request, msg: str = "", error: str = ""):
-    return templates.TemplateResponse(
-        "upload.html",
-        {
-            "request": request,
-            "msg": msg,
-            "error": error,
-        },
-    )
-
-
-# ---------------------------------------------------
+    # ---------------------------------------------------
 # SUBIR EXCEL
 # ---------------------------------------------------
 @app.post("/upload_excel")
@@ -298,63 +128,66 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
     try:
         empresa = get_empresa_activa(db)
         if not empresa:
-    msg = quote("No hay empresa activa. Creá una empresa primero.")
-    return RedirectResponse(url=f"/?error={msg}", status_code=303)
+            msg = quote("No hay empresa activa. Creá una empresa primero.")
+            return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
-IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
-os.makedirs(IMAGES_PATH, exist_ok=True)
+        IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
+        os.makedirs(IMAGES_PATH, exist_ok=True)
 
-df = pd.read_excel(file.file)
-df.columns = [c.strip().lower() for c in df.columns]
+        df = pd.read_excel(file.file)
+        df.columns = [c.strip().lower() for c in df.columns]
 
-required = ["codigo", "descripcion", "precio"]
-for col in required:
-    if col not in df.columns:
-        msg = quote(f"Falta columna obligatoria: {col}")
+        required = ["codigo", "descripcion", "precio"]
+        for col in required:
+            if col not in df.columns:
+                msg = quote(f"Falta columna obligatoria: {col}")
+                return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
+        nuevos = 0
+        actualizados = 0
+
+        for _, row in df.iterrows():
+            codigo = str(row.get("codigo", "")).strip()
+            if not codigo:
+                continue
+
+            existe = db.query(models.Producto).filter(
+                models.Producto.codigo == codigo,
+                models.Producto.empresa_id == empresa.id
+            ).first()
+
+            imagen_archivo = f"{codigo}.jpg"
+            imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
+            imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
+
+            if existe:
+                existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
+                existe.precio = float(row.get("precio", existe.precio))
+                existe.imagen = imagen_url or existe.imagen
+                actualizados += 1
+            else:
+                producto = models.Producto(
+                    codigo=codigo,
+                    descripcion=str(row.get("descripcion", "")),
+                    precio=float(row.get("precio", 0)),
+                    imagen=imagen_url,
+                    empresa_id=empresa.id
+                )
+                db.add(producto)
+                nuevos += 1
+
+        db.commit()
+
+        msg = quote(f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}")
+        return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
+    except Exception as e:
+        print("Error Excel:", e)
+        msg = quote("Error al procesar el Excel.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
-nuevos = 0
-actualizados = 0
-
-for _, row in df.iterrows():
-    codigo = str(row.get("codigo", "")).strip()
-    if not codigo:
-        continue
-
-    existe = db.query(models.Producto).filter(
-        models.Producto.codigo == codigo,
-        models.Producto.empresa_id == empresa.id
-    ).first()
-
-    imagen_archivo = f"{codigo}.jpg"
-    imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
-    imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
-
-    if existe:
-        existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
-        existe.precio = float(row.get("precio", existe.precio))
-        existe.imagen = imagen_url or existe.imagen
-        actualizados += 1
-    else:
-        producto = models.Producto(
-            codigo=codigo,
-            descripcion=str(row.get("descripcion", "")),
-            precio=float(row.get("precio", 0)),
-            imagen=imagen_url,
-            empresa_id=empresa.id
-        )
-        db.add(producto)
-        nuevos += 1
-
-db.commit()
-
-msg = quote(f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}")
-return RedirectResponse(url=f"/?msg={msg}", status_code=303)
-
-
-
 # ---------------------------------------------------
-# SUBIR ZIP DE IMÁGENES (MULTIEMPRESA)
+# SUBIR ZIP DE IMÁGENES
 # ---------------------------------------------------
 @app.post("/upload_zip")
 def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -386,26 +219,15 @@ def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
         msg = quote("Error al procesar el ZIP.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
-
-
 # ---------------------------------------------------
-# BORRAR TODOS LOS PRODUCTOS
+# BORRAR PRODUCTOS
 # ---------------------------------------------------
 @app.post("/delete_all_products")
 def delete_all_products(db: Session = Depends(get_db)):
-
-    try:
-        db.query(models.Producto).delete()
-        db.commit()
-
-        msg = quote("Productos eliminados.")
-        return RedirectResponse(url=f"/?msg={msg}", status_code=303)
-
-    except Exception as e:
-        print("Error borrando:", e)
-        msg = quote("Error al borrar productos.")
-        return RedirectResponse(url=f"/?error={msg}", status_code=303)
-
+    db.query(models.Producto).delete()
+    db.commit()
+    msg = quote("Productos eliminados.")
+    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
 # ---------------------------------------------------
 # CATÁLOGO
@@ -421,41 +243,20 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
 
     if q:
         query_db = query_db.filter(models.Producto.descripcion.ilike(f"%{q}%"))
-
     if categoria:
         query_db = query_db.filter(models.Producto.categoria == categoria)
 
     productos = query_db.all()
 
-    categorias_raw = (
-        db.query(models.Producto.categoria)
-        .filter(models.Producto.empresa_id == empresa.id)
-        .distinct()
-        .all()
-    )
-
-    categorias = sorted([c[0] for c in categorias_raw if c[0]])
-
-    productos_json = [
-        {
-            "id": p.id,
-            "codigo": p.codigo,
-            "descripcion": p.descripcion,
-            "marca": p.marca,
-            "precio": p.precio,
-            "stock": p.stock,
-            "imagen_url": p.imagen_url,
-            "categoria": p.categoria,
-        }
-        for p in productos
-    ]
+    categorias = sorted({
+        p.categoria for p in productos if p.categoria
+    })
 
     return templates.TemplateResponse(
         "catalogo.html",
         {
             "request": request,
             "productos": productos,
-            "productos_json": productos_json,
             "empresa": empresa,
             "categorias": categorias,
             "categoria_actual": categoria,
@@ -463,46 +264,35 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
         },
     )
 
-
 # ---------------------------------------------------
-# PDF DEL PEDIDO
+# PDF PEDIDO
 # ---------------------------------------------------
 @app.post("/pedido/pdf")
 async def generar_pdf(data: dict):
 
-    empresa = data.get("empresa", "Pedido de Cliente")
+    empresa = data.get("empresa", "Pedido")
     items: List[dict] = data.get("items", [])
 
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
 
-    width, height = A4
-    y = height - 40
-
+    y = A4[1] - 40
     c.setFont("Helvetica-Bold", 18)
     c.drawString(40, y, empresa)
     y -= 40
 
-    c.setFont("Helvetica", 11)
     total = 0
+    c.setFont("Helvetica", 11)
 
     for item in items:
+        subtotal = item["precio"] * item["cantidad"]
         c.drawString(40, y, f'{item["cantidad"]}x {item["codigo"]} - {item["descripcion"]}')
         y -= 18
-
-        subtotal = item["precio"] * item["cantidad"]
-        c.drawString(60, y, f'Precio: ${item["precio"]:.2f} - Subtotal: ${subtotal:.2f}')
+        c.drawString(60, y, f'${subtotal:.2f}')
         y -= 22
-
         total += subtotal
 
-        if y < 60:
-            c.showPage()
-            c.setFont("Helvetica", 11)
-            y = height - 40
-
     c.setFont("Helvetica-Bold", 14)
-    y -= 20
     c.drawString(40, y, f"TOTAL: ${total:.2f}")
 
     c.save()
@@ -514,47 +304,11 @@ async def generar_pdf(data: dict):
         headers={"Content-Disposition": "attachment; filename=pedido.pdf"}
     )
 
-
 # ---------------------------------------------------
-# CREAR EMPRESA
-# ---------------------------------------------------
-@app.post("/empresa/crear")
-def crear_empresa(data: dict, db: Session = Depends(get_db)):
-
-    nombre = data.get("nombre")
-    slug = data.get("slug")
-    whatsapp = data.get("whatsapp", "")
-
-    if not nombre or not slug:
-        return {"error": "nombre y slug son obligatorios"}
-
-    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
-    if existe:
-        return {"error": "Ya existe una empresa con ese slug"}
-
-    empresa = models.Empresa(
-        nombre=nombre,
-        slug=slug,
-        whatsapp=whatsapp
-    )
-
-    db.add(empresa)
-    db.commit()
-    db.refresh(empresa)
-
-    return {
-        "status": "ok",
-        "empresa_id": empresa.id,
-        "slug": empresa.slug
-    }
-
-
-# ---------------------------------------------------
-# LISTAR EMPRESAS (DEBUG)
+# DEBUG
 # ---------------------------------------------------
 @app.get("/debug/empresas")
 def listar_empresas(db: Session = Depends(get_db)):
-    empresas = db.query(models.Empresa).all()
     return [
         {
             "id": e.id,
@@ -562,20 +316,16 @@ def listar_empresas(db: Session = Depends(get_db)):
             "slug": e.slug,
             "whatsapp": e.whatsapp
         }
-        for e in empresas
+        for e in db.query(models.Empresa).all()
     ]
 
-# ---------------------------------------------------
-# BORRAR EMPRESA (USO ADMIN / TEMPORAL)
-# ---------------------------------------------------
 @app.post("/empresa/borrar/{empresa_id}")
 def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
-
     if not empresa:
         return {"error": "Empresa no encontrada"}
-
     db.delete(empresa)
     db.commit()
+    return {"status": "ok"}
 
-    return {"status": "ok", "deleted_id": empresa_id}
+
