@@ -72,6 +72,55 @@ def get_empresa_activa(db: Session):
         .order_by(models.Empresa.id.desc())
         .first()
     )
+
+from fastapi import Form, UploadFile
+from pathlib import Path
+
+@app.post("/empresa/crear_panel")
+async def crear_empresa_panel(
+    nombre: str = Form(...),
+    slug: str = Form(...),
+    whatsapp: str = Form(""),
+    logo: UploadFile = None,
+    banner: UploadFile = None,
+    db: Session = Depends(get_db)
+):
+    # validar slug único
+    existe = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if existe:
+        return RedirectResponse(url="/?error=La empresa ya existe", status_code=303)
+
+    empresa = models.Empresa(
+        nombre=nombre,
+        slug=slug,
+        whatsapp=whatsapp
+    )
+
+    db.add(empresa)
+    db.commit()
+    db.refresh(empresa)
+
+    # crear carpeta empresa
+    base_path = Path("app/static/empresas") / slug
+    productos_path = base_path / "productos"
+    base_path.mkdir(parents=True, exist_ok=True)
+    productos_path.mkdir(exist_ok=True)
+
+    # guardar logo
+    if logo:
+        with open(base_path / "logo.png", "wb") as f:
+            f.write(await logo.read())
+
+    # guardar banner
+    if banner:
+        with open(base_path / "banner.jpg", "wb") as f:
+            f.write(await banner.read())
+
+    return RedirectResponse(
+        url="/?msg=Empresa creada y activa correctamente",
+        status_code=303
+    )
+
         
 
 # ---------------------------------------------------
