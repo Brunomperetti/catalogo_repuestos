@@ -256,9 +256,10 @@ for p in productos:
         p.imagen_url = "/static/img/no-image.png"
 
 
-    categorias = sorted({
-        p.categoria for p in productos if p.categoria
-    })
+    categorias = sorted(
+        list({p.categoria for p in productos if p.categoria})
+    )
+
 
     return templates.TemplateResponse(
         "catalogo.html",
