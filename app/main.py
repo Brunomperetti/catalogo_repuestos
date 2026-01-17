@@ -70,7 +70,7 @@ def upload_view(request: Request, msg: str = "", error: str = ""):
     )
 
 # ---------------------------------------------------
-# CREAR EMPRESA (ÚNICO ENDPOINT)
+# CREAR EMPRESA
 # ---------------------------------------------------
 @app.post("/empresa/crear_panel")
 async def crear_empresa_panel(
@@ -119,7 +119,8 @@ async def crear_empresa_panel(
         url="/?msg=Empresa creada correctamente",
         status_code=303
     )
-    # ---------------------------------------------------
+
+# ---------------------------------------------------
 # SUBIR EXCEL
 # ---------------------------------------------------
 @app.post("/upload_excel")
@@ -187,7 +188,7 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
 # ---------------------------------------------------
-# SUBIR ZIP DE IMÁGENES
+# SUBIR ZIP
 # ---------------------------------------------------
 @app.post("/upload_zip")
 def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -220,16 +221,6 @@ def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
 
 # ---------------------------------------------------
-# BORRAR PRODUCTOS
-# ---------------------------------------------------
-@app.post("/delete_all_products")
-def delete_all_products(db: Session = Depends(get_db)):
-    db.query(models.Producto).delete()
-    db.commit()
-    msg = quote("Productos eliminados.")
-    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
-
-# ---------------------------------------------------
 # CATÁLOGO
 # ---------------------------------------------------
 @app.get("/catalogo/{slug}", response_class=HTMLResponse)
@@ -248,22 +239,32 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
 
     productos = query_db.all()
 
-    # armar imagen_url para el template (evita error 500)
     for p in productos:
         if p.imagen:
             p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.imagen}"
         else:
             p.imagen_url = "/static/img/no-image.png"
 
-    categorias = sorted(
-        list({p.categoria for p in productos if p.categoria})
-    )
+    categorias = sorted(list({p.categoria for p in productos if p.categoria}))
+
+    productos_json = [
+        {
+            "id": p.id,
+            "codigo": p.codigo,
+            "descripcion": p.descripcion,
+            "precio": p.precio,
+            "imagen_url": p.imagen_url,
+            "categoria": p.categoria,
+        }
+        for p in productos
+    ]
 
     return templates.TemplateResponse(
         "catalogo.html",
         {
             "request": request,
             "productos": productos,
+            "productos_json": productos_json,
             "empresa": empresa,
             "categorias": categorias,
             "categoria_actual": categoria,
@@ -272,7 +273,7 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
     )
 
 # ---------------------------------------------------
-# PDF PEDIDO
+# PDF
 # ---------------------------------------------------
 @app.post("/pedido/pdf")
 async def generar_pdf(data: dict):
@@ -334,5 +335,6 @@ def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
     db.delete(empresa)
     db.commit()
     return {"status": "ok"}
+
 
 
