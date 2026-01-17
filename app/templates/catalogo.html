@@ -370,15 +370,21 @@
 
     <!-- BANNER -->
     <div class="banner-wrap mb-4">
-        <img src="/static/images/banner.jpg" alt="Banner">
+        <img src="/static/empresas/{{ empresa.slug }}/banner.jpg"
+         alt="Banner {{ empresa.nombre }}"
+         onerror="this.style.display='none'">
     </div>
+
 
     <!-- HEADER -->
     {% if empresa %}
     <div class="header-box d-flex align-items-center justify-content-between flex-wrap gap-3">
 
         <div class="d-flex align-items-center gap-3 flex-wrap">
-            <img src="/static/images/logo.png" class="header-logo">
+            <img src="/static/empresas/{{ empresa.slug }}/logo.png"
+                 class="header-logo"
+                 onerror="this.style.display='none'">
+
             <div>
                 <div class="header-title">Catálogo oficial</div>
                 <div class="header-name">{{ empresa.nombre }}</div>
@@ -389,9 +395,12 @@
         </div>
 
         <!-- CTA DESCARGA -->
-        <a href="/static/lista_precios.pdf" class="cta-download" download>
+        <a href="/static/empresas/{{ empresa.slug }}/lista_precios.pdf"
+           class="cta-download"
+           download>
             Descargar lista de precios COMPLETA
         </a>
+
 
     </div>
     {% endif %}
@@ -456,11 +465,11 @@
 
             <div class="card catalog-card" onclick="abrirModal({{ p.id }})">
 
-                {% if p.imagen_url %}
-                <img src="/static/images/{{ p.imagen_url }}" class="card-img-top" loading="lazy">
-                {% else %}
-                <img src="/static/images/no-image.png" class="card-img-top" loading="lazy">
-                {% endif %}
+                <img src="{{ p.imagen_url }}"
+                     class="card-img-top"
+                     loading="lazy"
+                     onerror="this.src='/static/img/no-image.png'">
+
 
                 <button type="button"
                         class="favorite-btn"
@@ -637,7 +646,8 @@ function abrirModal(id) {
 
     // Imagen
     document.getElementById("modalImagen").src =
-        "/static/images/" + (p.imagen_url || "no-image.png");
+        p.imagen_url || "/static/img/no-image.png";
+
 
     // SEMÁFORO DE STOCK EN MODAL
     const stockEl = document.getElementById("modalStock");
