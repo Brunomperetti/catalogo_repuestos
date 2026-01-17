@@ -249,17 +249,15 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
     productos = query_db.all()
 
     # armar imagen_url para el template (evita error 500)
-for p in productos:
-    if p.imagen:
-        p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.imagen}"
-    else:
-        p.imagen_url = "/static/img/no-image.png"
-
+    for p in productos:
+        if p.imagen:
+            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.imagen}"
+        else:
+            p.imagen_url = "/static/img/no-image.png"
 
     categorias = sorted(
         list({p.categoria for p in productos if p.categoria})
     )
-
 
     return templates.TemplateResponse(
         "catalogo.html",
