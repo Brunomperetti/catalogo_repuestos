@@ -75,7 +75,7 @@ def get_empresa_activa(db: Session):
     return db.query(models.Empresa).order_by(models.Empresa.id.desc()).first()
 
 
-@app.post("/empresa/activar/{slug}")
+@app.get("/empresa/activar/{slug}")
 def activar_empresa(slug: str, db: Session = Depends(get_db)):
     """
     Setea la empresa activa por slug.
