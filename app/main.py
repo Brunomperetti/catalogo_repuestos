@@ -54,6 +54,53 @@ def get_empresa_activa(db: Session):
         .order_by(models.Empresa.id.desc())
         .first()
     )
+# ---------------------------------------------------
+# EMPRESA ACTIVA (en memoria)
+# ---------------------------------------------------
+EMPRESA_ACTIVA_ID = None
+
+def get_empresa_activa(db: Session):
+    """
+    Si hay EMPRESA_ACTIVA_ID seteada, usa esa.
+    Si no, usa la última creada (fallback).
+    """
+    global EMPRESA_ACTIVA_ID
+
+    if EMPRESA_ACTIVA_ID is not None:
+        empresa = db.query(models.Empresa).filter(models.Empresa.id == EMPRESA_ACTIVA_ID).first()
+        if empresa:
+            return empresa
+
+    # fallback: última creada
+    return db.query(models.Empresa).order_by(models.Empresa.id.desc()).first()
+
+
+@app.post("/empresa/activar/{slug}")
+def activar_empresa(slug: str, db: Session = Depends(get_db)):
+    """
+    Setea la empresa activa por slug.
+    Luego, /upload_excel y /upload_zip cargan en esa empresa.
+    """
+    global EMPRESA_ACTIVA_ID
+
+    slug = (slug or "").strip().lower()
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa:
+        return {"error": "Empresa no encontrada", "slug": slug}
+
+    EMPRESA_ACTIVA_ID = empresa.id
+    return {"status": "ok", "empresa_activa": {"id": empresa.id, "slug": empresa.slug, "nombre": empresa.nombre}}
+
+
+@app.get("/empresa/activa")
+def ver_empresa_activa(db: Session = Depends(get_db)):
+    """
+    Devuelve qué empresa está activa ahora.
+    """
+    empresa = get_empresa_activa(db)
+    if not empresa:
+        return {"empresa_activa": None}
+    return {"empresa_activa": {"id": empresa.id, "slug": empresa.slug, "nombre": empresa.nombre}}
 
 # ---------------------------------------------------
 # HOME PANEL
