@@ -294,16 +294,15 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
     # armar imagen_url dinámicamente por código
     for p in productos:
         base_path = f"app/static/empresas/{empresa.slug}/productos"
-        jpg_path = f"{base_path}/{p.codigo}.jpg"
         png_path = f"{base_path}/{p.codigo}.png"
+        jpg_path = f"{base_path}/{p.codigo}.jpg"
 
         if os.path.exists(png_path):
-        p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.png"
+            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.png"
         elif os.path.exists(jpg_path):
-        p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
+            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
         else:
-        p.imagen_url = "/static/images/no-image.png
-
+            p.imagen_url = "/static/img/no-image.png"
 
 
 
