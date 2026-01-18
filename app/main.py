@@ -211,18 +211,17 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             if existe:
                 existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
                 existe.precio = float(row.get("precio", existe.precio))
-                existe.imagen = imagen_url or existe.imagen
                 actualizados += 1
             else:
                 producto = models.Producto(
-                    codigo=codigo,
-                    descripcion=str(row.get("descripcion", "")),
-                    precio=float(row.get("precio", 0)),
-                    imagen=imagen_url,
-                    empresa_id=empresa.id
-                )
+                codigo=codigo,
+                descripcion=str(row.get("descripcion", "")),
+                precio=float(row.get("precio", 0)),
+                empresa_id=empresa.id
+            )
                 db.add(producto)
                 nuevos += 1
+
 
         db.commit()
 
