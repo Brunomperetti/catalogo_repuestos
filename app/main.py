@@ -386,4 +386,17 @@ def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+# ---------------------------------------------------
+# DEBUG: LISTAR ARCHIVOS DE IMAGEN DE UNA EMPRESA
+# ---------------------------------------------------
+@app.get("/debug/imagenes/{slug}")
+def debug_imagenes(slug: str):
+    slug = (slug or "").strip().lower()
+    path = Path(f"app/static/empresas/{slug}/productos")
+    if not path.exists():
+        return {"error": "Carpeta no existe", "path": str(path)}
+
+    files = sorted([p.name for p in path.iterdir() if p.is_file()])
+    # devolvemos solo los primeros 200 para no explotar la respuesta
+    return {"path": str(path), "count": len(files), "files": files[:200]}
 
