@@ -204,9 +204,15 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
                 models.Producto.empresa_id == empresa.id
             ).first()
 
-            imagen_archivo = f"{codigo}.jpg"
-            imagen_path = os.path.join(IMAGES_PATH, imagen_archivo)
-            imagen_url = imagen_archivo if os.path.exists(imagen_path) else ""
+            imagen_url = ""
+
+            for ext in [".jpg", ".png", ".jpeg", ".webp"]:
+                nombre = f"{codigo}{ext}"
+                path_img = os.path.join(IMAGES_PATH, nombre)
+                if os.path.exists(path_img):
+                    imagen_url = nombre
+                    break
+
 
             if existe:
                 existe.descripcion = str(row.get("descripcion", "")) or existe.descripcion
