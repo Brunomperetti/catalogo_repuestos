@@ -285,11 +285,14 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
 
     productos = query_db.all()
 
+    # armar imagen_url dinámicamente por código
     for p in productos:
-        if p.imagen:
-            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.imagen}"
+        imagen_path = f"app/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
+        if os.path.exists(imagen_path):
+            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
         else:
             p.imagen_url = "/static/img/no-image.png"
+
 
     categorias = sorted(list({p.categoria for p in productos if p.categoria}))
 
