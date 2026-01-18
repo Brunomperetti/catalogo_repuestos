@@ -302,7 +302,8 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
         elif os.path.exists(jpg_path):
         p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
         else:
-        p.imagen_url = "/static/img/no-image.png"
+        p.imagen_url = "/static/images/no-image.png
+
 
 
 
