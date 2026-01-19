@@ -170,42 +170,62 @@
       {% endfor %}
     </select>
 
-    <button class="btn-primary">Cambiar</button>
+    <button class="btn-main" type="submit">
+    Cambiar
+</button>
 
-    {% if empresa_activa %}
-      <a href="/catalogo/{{ empresa_activa.slug }}" class="btn-secondary">
+{% if empresa_activa %}
+<a href="/catalogo/{{ empresa_activa.slug }}">
+    <button class="btn-sec" type="button">
         Ir al catálogo 🚗
-      </a>
-    {% endif %}
+    </button>
+</a>
+{% endif %}
+
   </div>
 </form>
 
 {% if empresa_activa %}
-<div class="card" style="margin-bottom:30px;">
-  <h3>Editar imágenes de {{ empresa_activa.nombre }}</h3>
+<div class="panel-section mb-4">
 
-  <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data">
-    
-    <div style="margin-bottom:12px;">
-      <label>Logo</label><br>
+  <h2>🖼️ Imágenes de {{ empresa_activa.nombre }}</h2>
+
+  <form method="post"
+        action="/empresa/actualizar_imagenes"
+        enctype="multipart/form-data">
+
+    <!-- LOGO -->
+    <div style="margin-bottom:18px;">
+      <label class="section-title">Logo</label>
       <input type="file" name="logo" accept="image/*">
-      <br>
-      <img src="/static/empresas/{{ empresa_activa.slug }}/logo.png"
-           style="max-height:80px;margin-top:10px;">
+
+      <div style="margin-top:10px;">
+        <img
+          src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
+          style="max-height:80px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.4));">
+      </div>
     </div>
 
-    <div style="margin-bottom:12px;">
-      <label>Banner</label><br>
+    <!-- BANNER -->
+    <div style="margin-bottom:18px;">
+      <label class="section-title">Banner</label>
       <input type="file" name="banner" accept="image/*">
-      <br>
-      <img src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg"
-           style="max-width:100%;max-height:120px;margin-top:10px;">
+
+      <div style="margin-top:10px;">
+        <img
+          src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
+          style="max-width:100%;max-height:140px;border-radius:12px;">
+      </div>
     </div>
 
-    <button class="btn-primary">Actualizar imágenes</button>
+    <button class="btn-main" type="submit">
+      Guardar cambios
+    </button>
+
   </form>
 </div>
 {% endif %}
+
 
     <!-- ============================= -->
 <!-- CREAR EMPRESA -->
@@ -276,11 +296,14 @@
     </form>
 
     <!-- Ver catálogo -->
-    <a href="/catalogo/automotores-pepe" target="_blank">
+    {% if empresa_activa %}
+    <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank">
         <button class="btn-sec mt-2" type="button">
             Ver catálogo completo 🚗
         </button>
-    </a>
+</a>
+{% endif %}
+
 
     <!-- Borrar todo -->
     <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
