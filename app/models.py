@@ -11,9 +11,6 @@ class Empresa(Base):
     slug = Column(String, nullable=False, unique=True)
     whatsapp = Column(String, nullable=True)
 
-    # PASO 5 — estado de publicación del catálogo
-    publicado = Column(Boolean, default=False, nullable=False)
-
     productos = relationship(
         "Producto",
         back_populates="empresa",
@@ -42,9 +39,9 @@ class Producto(Base):
     stock = Column(Integer, default=0)
     activo = Column(Boolean, default=True)
 
-    # Imagen del producto (se resuelve dinámicamente,
-    # pero dejamos la columna para futuras ediciones individuales)
+    # Imagen del producto (para edición individual futura)
     imagen_url = Column(String, nullable=True)
 
     empresa = relationship("Empresa", back_populates="productos")
+
 
