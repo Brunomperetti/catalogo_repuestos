@@ -155,6 +155,39 @@
 
 <body>
 
+{% if empresa_activa %}
+<div style="
+  max-width:560px;
+  margin:0 auto 25px auto;
+  padding:20px;
+  border-radius:18px;
+  background:rgba(15,23,42,0.95);
+  border:1px solid rgba(56,189,248,0.45);
+  box-shadow:0 0 40px rgba(0,0,0,0.6);
+  text-align:center;
+">
+
+  <img src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+       style="max-height:80px;margin-bottom:10px;">
+
+  <h2 style="margin:0;font-size:1.4rem;font-weight:700;">
+    {{ empresa_activa.nombre }}
+  </h2>
+
+  <div style="font-size:0.85rem;color:#9ca3af;margin-bottom:12px;">
+    Empresa activa
+  </div>
+
+  <a href="/catalogo/{{ empresa_activa.slug }}"
+     class="btn btn-success btn-sm"
+     target="_blank">
+    Ir al catálogo 🚗
+  </a>
+
+</div>
+{% endif %}
+
+    
 <div class="panel">
     
 <form method="post" action="/empresa/activar_panel" style="margin-bottom:20px;">
