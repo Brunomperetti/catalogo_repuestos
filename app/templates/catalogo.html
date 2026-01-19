@@ -467,10 +467,11 @@
 
             <div class="card catalog-card" onclick="abrirModal({{ p.id }})">
 
-                <img src="{{ p.imagen_url }}"
+                <<img src="{{ p.imagen_url }}"
                      class="card-img-top"
                      loading="lazy"
-                     onerror="this.src='/static/img/no-image.png'">
+                     onerror="this.onerror=null;this.src='/static/img/no-image.jpg';">
+
 
 
                 <button type="button"
