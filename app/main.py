@@ -156,8 +156,6 @@ def admin_productos(request: Request, db: Session = Depends(get_db)):
         },
     )
 
-
-    # actualizar imagen individual
 @app.post("/admin/productos/{producto_id}/actualizar")
 async def actualizar_producto(
     producto_id: int,
