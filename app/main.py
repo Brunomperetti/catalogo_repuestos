@@ -102,17 +102,62 @@ def ver_empresa_activa(db: Session = Depends(get_db)):
         return {"empresa_activa": None}
     return {"empresa_activa": {"id": empresa.id, "slug": empresa.slug, "nombre": empresa.nombre}}
 
+@app.post("/empresa/actualizar_imagenes")
+async def actualizar_imagenes_empresa(
+    logo: UploadFile = File(None),
+    banner: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    empresa = get_empresa_activa(db)
+    if not empresa:
+        return RedirectResponse(url="/?error=No hay empresa activa", status_code=303)
+
+    base_path = Path("app/static/empresas") / empresa.slug
+    base_path.mkdir(parents=True, exist_ok=True)
+
+    if logo:
+        with open(base_path / "logo.png", "wb") as f:
+            f.write(await logo.read())
+
+    if banner:
+        with open(base_path / "banner.jpg", "wb") as f:
+            f.write(await banner.read())
+
+    return RedirectResponse(url="/?msg=Imágenes actualizadas", status_code=303)
+
+
+@app.post("/empresa/activar_panel")
+def activar_empresa_panel(
+    slug: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    global EMPRESA_ACTIVA_ID
+
+    slug = (slug or "").strip().lower()
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+
+    if not empresa:
+        return RedirectResponse(url="/?error=Empresa no encontrada", status_code=303)
+
+    EMPRESA_ACTIVA_ID = empresa.id
+    return RedirectResponse(url="/", status_code=303)
+
 # ---------------------------------------------------
 # HOME PANEL
 # ---------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def upload_view(request: Request, msg: str = "", error: str = ""):
+def upload_view(request: Request, msg: str = "", error: str = "", db: Session = Depends(get_db)):
+    empresas = db.query(models.Empresa).order_by(models.Empresa.nombre).all()
+    empresa_activa = get_empresa_activa(db)
+
     return templates.TemplateResponse(
         "upload.html",
         {
             "request": request,
             "msg": msg,
             "error": error,
+            "empresas": empresas,
+            "empresa_activa": empresa_activa,
         },
     )
 
