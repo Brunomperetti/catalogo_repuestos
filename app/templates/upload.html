@@ -156,6 +156,56 @@
 <body>
 
 <div class="panel">
+    
+<form method="post" action="/empresa/activar_panel" style="margin-bottom:20px;">
+  <label style="color:#9ca3af;">Empresa activa</label>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <select name="slug" style="padding:10px;border-radius:10px;min-width:260px;">
+      {% for e in empresas %}
+        <option value="{{ e.slug }}"
+          {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>
+          {{ e.nombre }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <button class="btn-primary">Cambiar</button>
+
+    {% if empresa_activa %}
+      <a href="/catalogo/{{ empresa_activa.slug }}" class="btn-secondary">
+        Ir al catálogo 🚗
+      </a>
+    {% endif %}
+  </div>
+</form>
+
+{% if empresa_activa %}
+<div class="card" style="margin-bottom:30px;">
+  <h3>Editar imágenes de {{ empresa_activa.nombre }}</h3>
+
+  <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data">
+    
+    <div style="margin-bottom:12px;">
+      <label>Logo</label><br>
+      <input type="file" name="logo" accept="image/*">
+      <br>
+      <img src="/static/empresas/{{ empresa_activa.slug }}/logo.png"
+           style="max-height:80px;margin-top:10px;">
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label>Banner</label><br>
+      <input type="file" name="banner" accept="image/*">
+      <br>
+      <img src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg"
+           style="max-width:100%;max-height:120px;margin-top:10px;">
+    </div>
+
+    <button class="btn-primary">Actualizar imágenes</button>
+  </form>
+</div>
+{% endif %}
 
     <!-- ============================= -->
 <!-- CREAR EMPRESA -->
