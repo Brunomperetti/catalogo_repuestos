@@ -149,6 +149,8 @@ def activar_empresa_panel(
 def upload_view(request: Request, msg: str = "", error: str = "", db: Session = Depends(get_db)):
     empresas = db.query(models.Empresa).order_by(models.Empresa.nombre).all()
     empresa_activa = get_empresa_activa(db)
+    import time
+
 
     return templates.TemplateResponse(
         "upload.html",
@@ -158,6 +160,7 @@ def upload_view(request: Request, msg: str = "", error: str = "", db: Session = 
             "error": error,
             "empresas": empresas,
             "empresa_activa": empresa_activa,
+            "time": int(time.time())
         },
     )
 
