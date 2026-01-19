@@ -195,6 +195,26 @@ async def actualizar_producto(
     db.commit()
     return RedirectResponse(url="/admin/productos", status_code=303)
 
+@app.get("/admin/borrar_empresa/{empresa_id}")
+def borrar_empresa_get(empresa_id: int, db: Session = Depends(get_db)):
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
+    if not empresa:
+        return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
+
+    slug = empresa.slug
+
+    # borrar de DB
+    db.delete(empresa)
+    db.commit()
+
+    # borrar carpeta estática
+    path = Path(f"app/static/empresas/{slug}")
+    if path.exists():
+        shutil.rmtree(path)
+
+    return HTMLResponse(
+        f"<h1>Empresa {slug} eliminada correctamente</h1>"
+    )
 
 
     
