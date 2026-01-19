@@ -503,9 +503,18 @@ def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
     if not empresa:
         return {"error": "Empresa no encontrada"}
+
+    # borrar carpeta física
+    empresa_path = Path(f"app/static/empresas/{empresa.slug}")
+    if empresa_path.exists():
+        shutil.rmtree(empresa_path)
+
+    # borrar DB (productos se borran por cascade)
     db.delete(empresa)
     db.commit()
+
     return {"status": "ok"}
+
 
 
 # ---------------------------------------------------
