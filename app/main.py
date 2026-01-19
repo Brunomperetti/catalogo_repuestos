@@ -45,15 +45,7 @@ def get_db():
     finally:
         db.close()
 
-# ---------------------------------------------------
-# Empresa activa (última creada)
-# ---------------------------------------------------
-def get_empresa_activa(db: Session):
-    return (
-        db.query(models.Empresa)
-        .order_by(models.Empresa.id.desc())
-        .first()
-    )
+
 # ---------------------------------------------------
 # EMPRESA ACTIVA (en memoria)
 # ---------------------------------------------------
@@ -141,6 +133,65 @@ def activar_empresa_panel(
 
     EMPRESA_ACTIVA_ID = empresa.id
     return RedirectResponse(url="/", status_code=303)
+
+@app.get("/admin/productos", response_class=HTMLResponse)
+def admin_productos(request: Request, db: Session = Depends(get_db)):
+    empresa = get_empresa_activa(db)
+    if not empresa:
+        return HTMLResponse("<h1>No hay empresa activa</h1>", status_code=400)
+
+    productos = (
+        db.query(models.Producto)
+        .filter(models.Producto.empresa_id == empresa.id)
+        .order_by(models.Producto.codigo)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        "admin_productos.html",
+        {
+            "request": request,
+            "empresa": empresa,
+            "productos": productos,
+        },
+    )
+@app.post("/admin/productos/{producto_id}/actualizar")
+async def actualizar_producto(
+    producto_id: int,
+    descripcion: str = Form(...),
+    precio: float = Form(...),
+    activo: bool = Form(False),
+    imagen: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not producto:
+        return RedirectResponse(url="/admin/productos", status_code=303)
+
+    producto.descripcion = descripcion
+    producto.precio = precio
+    producto.activo = activo
+
+    # actualizar imagen individual
+    if imagen:
+        empresa = producto.empresa
+        img_path = Path(f"app/static/empresas/{empresa.slug}/productos")
+        img_path.mkdir(parents=True, exist_ok=True)
+
+        ext = Path(imagen.filename).suffix.lower()
+        filename = f"{producto.codigo}{ext}"
+        
+for ext in [".jpg", ".png", ".jpeg", ".webp"]:
+    old = img_path / f"{producto.codigo}{ext}"
+    if old.exists():
+        old.unlink()
+        
+        with open(img_path / filename, "wb") as f:
+            f.write(await imagen.read())
+
+    db.commit()
+    return RedirectResponse(url="/admin/productos", status_code=303)
+
 
 # ---------------------------------------------------
 # HOME PANEL
@@ -330,7 +381,11 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
     if not empresa:
         return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
 
-    query_db = db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id)
+    query_db = db.query(models.Producto).filter(
+        models.Producto.empresa_id == empresa.id,
+        models.Producto.activo == True
+    )
+
 
     if q:
         query_db = query_db.filter(models.Producto.descripcion.ilike(f"%{q}%"))
