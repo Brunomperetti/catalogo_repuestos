@@ -155,22 +155,7 @@ def admin_productos(request: Request, db: Session = Depends(get_db)):
             "productos": productos,
         },
     )
-@app.post("/admin/productos/{producto_id}/actualizar")
-async def actualizar_producto(
-    producto_id: int,
-    descripcion: str = Form(...),
-    precio: float = Form(...),
-    activo: bool = Form(False),
-    imagen: UploadFile = File(None),
-    db: Session = Depends(get_db),
-):
-    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
-    if not producto:
-        return RedirectResponse(url="/admin/productos", status_code=303)
 
-    producto.descripcion = descripcion
-    producto.precio = precio
-    producto.activo = activo
 
     # actualizar imagen individual
 @app.post("/admin/productos/{producto_id}/actualizar")
@@ -213,8 +198,8 @@ async def actualizar_producto(
     return RedirectResponse(url="/admin/productos", status_code=303)
 
 
-    db.commit()
-    return RedirectResponse(url="/admin/productos", status_code=303)
+
+    
 
 
 # ---------------------------------------------------
