@@ -456,7 +456,20 @@ def catalogo(
 
 
 
-    categorias = sorted(list({p.categoria for p in productos if p.categoria}))
+    # TODAS las categorías de la empresa (sin filtros)
+    categorias = (
+        db.query(models.Producto.categoria)
+        .filter(
+            models.Producto.empresa_id == empresa.id,
+            models.Producto.categoria.isnot(None)
+        )
+        .distinct()
+        .order_by(models.Producto.categoria)
+        .all()
+    )
+
+    categorias = [c[0] for c in categorias]
+
 
     productos_json = [
         {
