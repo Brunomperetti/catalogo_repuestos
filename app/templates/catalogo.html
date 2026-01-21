@@ -468,6 +468,8 @@
     <!-- FILTRO POR CATEGORÍA -->
 <form method="get" style="margin-bottom:20px;">
     <input type="hidden" name="q" value="{{ query }}">
+    <input type="hidden" name="marca" value="{{ marca_actual }}">
+    <input type="hidden" name="orden" value="{{ orden_actual }}">
 
     <select name="categoria"
             onchange="this.form.submit()"
@@ -481,9 +483,11 @@
         {% endfor %}
     </select>
 </form>
+
 <form method="get" style="margin-bottom:20px;">
     <input type="hidden" name="q" value="{{ query }}">
     <input type="hidden" name="categoria" value="{{ categoria_actual }}">
+    
 
     <select name="marca"
             onchange="this.form.submit()"
