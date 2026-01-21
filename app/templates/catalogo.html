@@ -362,6 +362,18 @@
             background: rgba(148,163,184,0.15);
             color: #cbd5e1;
         }
+        /* STOCK EN CARD (semáforo) */
+        .stock-card {
+            margin-top: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .stock-card .stock-pill {
+            padding: 3px 9px;
+            border-radius: 999px;
+            display: inline-block;
+        }
 
     </style>
 </head>
@@ -512,6 +524,28 @@
                     <div class="product-price mb-1">
                         ${{ '{:,.2f}'.format(p.precio) }}
                     </div>
+
+                    <div class="stock-card">
+                        {% if p.stock == 0 %}
+                            <span class="stock-pill stock-gray">Sin stock</span>
+
+                        {% elif p.stock <= 15 %}
+                            <span class="stock-pill stock-red">
+                                Stock bajo ({{ p.stock }})
+                            </span>
+
+                        {% elif p.stock <= 60 %}
+                            <span class="stock-pill stock-yellow">
+                                Stock medio ({{ p.stock }})
+                            </span>
+
+                        {% else %}
+                            <span class="stock-pill stock-green">
+                                Stock alto ({{ p.stock }})
+                            </span>
+                        {% endif %}
+                    </div>
+
                 </div>
 
             </div>
