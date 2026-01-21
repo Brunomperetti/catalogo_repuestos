@@ -402,7 +402,14 @@ def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
 # CATÁLOGO
 # ---------------------------------------------------
 @app.get("/catalogo/{slug}", response_class=HTMLResponse)
-def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: Session = Depends(get_db)):
+def catalogo(
+    slug: str,
+    request: Request,
+    q: str = "",
+    categoria: str = "",
+    orden: str = "",
+    db: Session = Depends(get_db)
+):
 
     empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if not empresa:
@@ -416,8 +423,21 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
 
     if q:
         query_db = query_db.filter(models.Producto.descripcion.ilike(f"%{q}%"))
+        
     if categoria:
         query_db = query_db.filter(models.Producto.categoria == categoria)
+    
+    # ORDEN
+    if orden == "precio-asc":
+        query_db = query_db.order_by(models.Producto.precio.asc())
+    elif orden == "precio-desc":
+        query_db = query_db.order_by(models.Producto.precio.desc())
+    elif orden == "codigo-asc":
+         query_db = query_db.order_by(models.Producto.codigo.asc())
+    elif orden == "marca-asc":
+        query_db = query_db.order_by(models.Producto.marca.asc())
+
+    
 
     productos = query_db.all()
 
@@ -450,7 +470,7 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
         for p in productos
     ]
 
-    return templates.TemplateResponse(
+       return templates.TemplateResponse(
         "catalogo.html",
         {
             "request": request,
@@ -459,9 +479,12 @@ def catalogo(slug: str, request: Request, q: str = "", categoria: str = "", db: 
             "empresa": empresa,
             "categorias": categorias,
             "categoria_actual": categoria,
+            "orden_actual": orden,
             "query": q,
         },
     )
+
+
 
 # ---------------------------------------------------
 # PDF
