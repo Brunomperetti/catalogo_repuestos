@@ -325,46 +325,34 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             if not codigo:
                 continue
 
+            categoria = str(row.get("categoria", "")).strip() or None
+            marca = str(row.get("marca", "")).strip() or None
+            stock = int(row.get("stock", 0)) if not pd.isna(row.get("stock", 0)) else 0
+
             existe = db.query(models.Producto).filter(
                 models.Producto.codigo == codigo,
                 models.Producto.empresa_id == empresa.id
             ).first()
 
-            imagen_url = ""
-
-            for ext in [".jpg", ".png", ".jpeg", ".webp"]:
-                nombre = f"{codigo}{ext}"
-                path_img = os.path.join(IMAGES_PATH, nombre)
-                if os.path.exists(path_img):
-                    imagen_url = nombre
-                    break
-
-
-    categoria = str(row.get("categoria", "")).strip() or None
-    marca = str(row.get("marca", "")).strip() or None
-    stock = int(row.get("stock", 0)) if not pd.isna(row.get("stock", 0)) else 0
-
-    if existe:
-        existe.descripcion = str(row.get("descripcion", existe.descripcion))
-        existe.precio = float(row.get("precio", existe.precio))
-        existe.categoria = categoria
-        existe.marca = marca
-        existe.stock = stock
-        actualizados += 1
-    else:
-        producto = models.Producto(
-            codigo=codigo,
-            descripcion=str(row.get("descripcion", "")),
-            categoria=categoria,
-            marca=marca,
-            precio=float(row.get("precio", 0)),
-            stock=stock,
-            empresa_id=empresa.id
-         )
-        db.add(producto)
-        nuevos += 1
-
-
+            if existe:
+                existe.descripcion = str(row.get("descripcion", existe.descripcion))
+                existe.precio = float(row.get("precio", existe.precio))
+                existe.categoria = categoria
+                existe.marca = marca
+                existe.stock = stock
+                actualizados += 1
+            else:
+                producto = models.Producto(
+                    codigo=codigo,
+                    descripcion=str(row.get("descripcion", "")),
+                    categoria=categoria,
+                    marca=marca,
+                    precio=float(row.get("precio", 0)),
+                    stock=stock,
+                    empresa_id=empresa.id
+                )
+                db.add(producto)
+                nuevos += 1
 
         db.commit()
 
@@ -375,6 +363,7 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
         print("Error Excel:", e)
         msg = quote("Error al procesar el Excel.")
         return RedirectResponse(url=f"/?error={msg}", status_code=303)
+
 
 # ---------------------------------------------------
 # SUBIR ZIP
