@@ -476,9 +476,11 @@ def catalogo(
             "id": p.id,
             "codigo": p.codigo,
             "descripcion": p.descripcion,
-            "precio": p.precio,
-            "imagen_url": p.imagen_url,
+            "precio": round(float(p.precio), 2),
             "categoria": p.categoria,
+            "marca": p.marca,
+            "stock": p.stock,
+            "imagen_url": p.imagen_url,
         }
         for p in productos
     ]
