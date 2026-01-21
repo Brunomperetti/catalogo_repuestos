@@ -452,6 +452,24 @@
             <button class="btn btn-sm btn-outline-light" id="toggle-theme">🌙 / ☀️</button>
         </div>
     </div>
+
+    <!-- FILTRO POR CATEGORÍA -->
+<form method="get" style="margin-bottom:20px;">
+    <input type="hidden" name="q" value="{{ query }}">
+
+    <select name="categoria"
+            onchange="this.form.submit()"
+            style="padding:8px;border-radius:8px;">
+        <option value="">Todas las categorías</option>
+        {% for cat in categorias %}
+            <option value="{{ cat }}"
+              {% if cat == categoria_actual %}selected{% endif %}>
+              {{ cat }}
+            </option>
+        {% endfor %}
+    </select>
+</form>
+
     <!-- GRID DE PRODUCTOS -->
     <div id="productos-grid" class="row g-3">
 
