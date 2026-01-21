@@ -470,18 +470,18 @@ def catalogo(
         for p in productos
     ]
 
-       return templates.TemplateResponse(
-        "catalogo.html",
-        {
-            "request": request,
-            "productos": productos,
-            "productos_json": productos_json,
-            "empresa": empresa,
-            "categorias": categorias,
-            "categoria_actual": categoria,
-            "orden_actual": orden,
-            "query": q,
-        },
+    return templates.TemplateResponse(
+    "catalogo.html",
+    {
+        "request": request,
+        "productos": productos,
+        "productos_json": productos_json,
+        "empresa": empresa,
+        "categorias": categorias,
+        "categoria_actual": categoria,
+        "orden_actual": orden,
+        "query": q,
+    },
     )
 
 
