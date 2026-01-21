@@ -481,6 +481,22 @@
         {% endfor %}
     </select>
 </form>
+<form method="get" style="margin-bottom:20px;">
+    <input type="hidden" name="q" value="{{ query }}">
+    <input type="hidden" name="categoria" value="{{ categoria_actual }}">
+
+    <select name="marca"
+            onchange="this.form.submit()"
+            style="padding:8px;border-radius:8px;">
+        <option value="">Todas las marcas</option>
+        {% for m in marcas %}
+            <option value="{{ m }}"
+              {% if m == marca_actual %}selected{% endif %}>
+              {{ m }}
+            </option>
+        {% endfor %}
+    </select>
+</form>
 
     <!-- GRID DE PRODUCTOS -->
     <div id="productos-grid" class="row g-3">
