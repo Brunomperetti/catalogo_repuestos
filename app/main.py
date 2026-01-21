@@ -407,9 +407,11 @@ def catalogo(
     request: Request,
     q: str = "",
     categoria: str = "",
+    marca: str = "",
     orden: str = "",
     db: Session = Depends(get_db)
 ):
+
 
     empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if not empresa:
@@ -426,6 +428,11 @@ def catalogo(
         
     if categoria:
         query_db = query_db.filter(models.Producto.categoria == categoria)
+        
+    if marca:
+        query_db = query_db.filter(models.Producto.marca == marca)
+
+    
     
     # ORDEN
     if orden == "precio-asc":
@@ -470,6 +477,20 @@ def catalogo(
 
     categorias = [c[0] for c in categorias]
 
+    marcas = (
+        db.query(models.Producto.marca)
+        .filter(
+            models.Producto.empresa_id == empresa.id,
+            models.Producto.marca.isnot(None)
+        )
+        .distinct()
+        .order_by(models.Producto.marca)
+        .all()
+    )
+
+    marcas = [m[0] for m in marcas]
+
+
 
     productos_json = [
         {
@@ -494,6 +515,8 @@ def catalogo(
         "empresa": empresa,
         "categorias": categorias,
         "categoria_actual": categoria,
+        "marcas": marcas,
+        "marca_actual": marca,
         "orden_actual": orden,
         "query": q,
     },
