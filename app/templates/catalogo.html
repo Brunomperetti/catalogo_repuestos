@@ -530,19 +530,13 @@
                             <span class="stock-pill stock-gray">Sin stock</span>
 
                         {% elif p.stock <= 15 %}
-                            <span class="stock-pill stock-red">
-                                Stock bajo ({{ p.stock }})
-                            </span>
+                            <span class="stock-pill stock-red">Stock bajo</span>
 
                         {% elif p.stock <= 60 %}
-                            <span class="stock-pill stock-yellow">
-                                Stock medio ({{ p.stock }})
-                            </span>
+                            <span class="stock-pill stock-yellow">Stock medio</span>
 
                         {% else %}
-                            <span class="stock-pill stock-green">
-                                Stock alto ({{ p.stock }})
-                            </span>
+                            <span class="stock-pill stock-green">Stock alto</span>
                         {% endif %}
                     </div>
 
