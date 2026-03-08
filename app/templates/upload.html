@@ -150,6 +150,52 @@
             color: #9ca3af;
             margin-top: 4px;
         }
+       .section-card{
+           background: rgba(15,23,42,0.92);
+           border: 1px solid rgba(56,189,248,0.28);
+           border-radius: 18px;
+           padding: 18px;
+           margin-top: 14px;
+           box-shadow: 0 0 40px rgba(0,0,0,0.45);
+           }
+
+       .section-title2{
+          font-size: 1rem;
+          font-weight: 700;
+          margin: 0 0 6px 0;
+        }
+        
+        .section-sub{
+          font-size: .85rem;
+          color: #9ca3af;
+          margin-bottom: 12px;
+        }
+        
+        .file{
+          margin-top: 4px;
+          padding: 10px 12px;
+          background: rgba(2,6,23,0.65);
+          border: 1px solid rgba(148,163,184,0.25);
+          border-radius: 12px;
+          width: 100%;
+          color: #e5e7eb;
+          font-size: 0.9rem;
+        }
+        
+        .btn-danger-soft{
+          background: rgba(239,68,68,0.12);
+          border: 1px solid rgba(239,68,68,0.55);
+          color: #fecaca;
+          width: 100%;
+          padding: 12px;
+          border-radius: 12px;
+          margin-top: 10px;
+          font-weight: 700;
+        }
+        .btn-danger-soft:hover{
+          background: rgba(239,68,68,0.20);
+        }
+    
     </style>
 </head>
 
@@ -168,7 +214,8 @@
 ">
 
   <img src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
-       style="max-height:80px;margin-bottom:10px;">
+       style="max-height:80px;margin-bottom:10px;"
+       onerror="this.style.display='none'">
 
   <h2 style="margin:0;font-size:1.4rem;font-weight:700;">
     {{ empresa_activa.nombre }}
@@ -235,7 +282,8 @@
       <div style="margin-top:10px;">
         <img
           src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
-          style="max-height:80px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.4));">
+          style="max-height:80px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.4));"
+          onerror="this.style.display='none'">
       </div>
     </div>
 
@@ -247,7 +295,8 @@
       <div style="margin-top:10px;">
         <img
           src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
-          style="max-width:100%;max-height:140px;border-radius:12px;">
+          style="max-width:100%;max-height:140px;border-radius:12px;"
+          onerror="this.style.display='none'">
       </div>
     </div>
 
@@ -293,72 +342,77 @@
 
 
     <!-- Logo -->
-    <img src="/static/images/logo.png" class="logo" alt="Logo">
+<img src="/static/images/logo.png" class="logo" alt="Logo">
 
-    <!-- Título -->
-    <h1>Carga de productos</h1>
+<!-- Título -->
+<h1>Carga de productos</h1>
 
-    <!-- Cuadro tutorial -->
-    <div class="tutorial-box">
-        <div class="tutorial-icon">📘</div>
-        <div class="tutorial-text">
-            ¿Primera vez usando el panel?  
-            <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing"
-               target="_blank"
-               class="tutorial-link">
-                Bajá la guía completa de uso
-            </a>
-            para una mejor navegación.
-        </div>
-    </div>
+<!-- Cuadro tutorial -->
+<div class="tutorial-box">
+  <div class="tutorial-icon">📘</div>
+  <div class="tutorial-text">
+    ¿Primera vez usando el panel?
+    <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing"
+       target="_blank"
+       class="tutorial-link">
+      Bajá la guía completa de uso
+    </a>
+    para una mejor navegación.
+  </div>
+</div>
 
-    <!-- 1. Subir Excel -->
-    <div class="section-title">1. Subir Excel de productos</div>
-    <form action="/upload_excel" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".xlsx" required>
-        <div class="hint-text">Columnas mínimas: codigo, descripcion, precio. Opcional: categoria, marca, stock.</div>
-        <button class="btn-main" type="submit">Subir Excel</button>
-    </form>
+<!-- 1) Excel -->
+<div class="section-card">
+  <div class="section-title2">1) Subir Excel de productos</div>
+  <div class="section-sub">Columnas mínimas: código, descripción, precio. (Opcional: categoría, marca, stock)</div>
 
-    <!-- 2. Subir ZIP -->
-    <div class="section-title mt-3">2. Subir ZIP de imágenes</div>
-    <form action="/upload_zip" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".zip" required>
-        <div class="hint-text">Las imágenes deben llamarse igual que el código (ej: VR-150.jpg).</div>
-        <button class="btn-sec" type="submit">Subir ZIP de imágenes</button>
-    </form>
+  <form action="/upload_excel" method="post" enctype="multipart/form-data">
+    <input class="file" type="file" name="file" accept=".xlsx" required>
+    <button class="btn-main mt-3" type="submit">Subir Excel</button>
+  </form>
+</div>
 
-    <!-- Ver catálogo -->
-    {% if empresa_activa %}
-    <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank">
-        <button class="btn-sec mt-2" type="button">
-            Ver catálogo completo 🚗
-        </button>
-</a>
-{% endif %}
+<!-- 2) ZIP -->
+<div class="section-card">
+  <div class="section-title2">2) Subir ZIP de imágenes</div>
+  <div class="section-sub">Las imágenes deben llamarse igual que el código (ej: VR-150.jpg)</div>
 
+  <form action="/upload_zip" method="post" enctype="multipart/form-data">
+    <input class="file" type="file" name="file" accept=".zip" required>
+    <button class="btn-sec mt-3" type="submit">Subir ZIP de imágenes</button>
+  </form>
 
-    <!-- Borrar todo -->
-    <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
-        <button class="btn-sec btn-sec-danger mt-2" type="submit">
-            Borrar TODOS los productos
-        </button>
-    </form>
+  {% if empresa_activa %}
+  <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn btn-outline-light w-100 mt-3">
+    Ver catálogo completo 🚗
+  </a>
+  {% endif %}
+</div>
 
-    <!-- Mensajes -->
-    <div class="alerts-wrapper">
-        {% if msg %}
-        <div class="alert alert-custom-success mt-2">
-            {{ msg }}
-        </div>
-        {% endif %}
+<!-- Danger zone -->
+<div class="section-card">
+  <div class="section-title2">Zona peligrosa</div>
+  <div class="section-sub">Esto borra todos los productos de la empresa activa.</div>
 
-        {% if error %}
-        <div class="alert alert-custom-error mt-2">
-            {{ error }}
-        </div>
-        {% endif %}
-    </div>
+  <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
+    <button class="btn-danger-soft" type="submit">Borrar TODOS los productos</button>
+  </form>
+</div>
+
+<!-- Mensajes -->
+<div class="alerts-wrapper">
+  {% if msg %}
+  <div class="alert alert-custom-success mt-2">
+    {{ msg }}
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div class="alert alert-custom-error mt-2">
+    {{ error }}
+  </div>
+  {% endif %}
+</div>
 
 </div>
 
@@ -370,7 +424,6 @@ function confirmarBorrado() {
 
 </body>
 </html>
-
 
 
 
