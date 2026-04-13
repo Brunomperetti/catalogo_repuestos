@@ -20,6 +20,7 @@
                 <div class="hero-badge">Empresa activa</div>
 
                 <h1 class="hero-title">{{ empresa_activa.nombre }}</h1>
+
                 <p class="hero-subtitle">
                     Gestioná identidad visual, productos e imágenes desde un solo panel.
                 </p>
@@ -36,8 +37,11 @@
                     src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
                     alt="Logo empresa activa"
                     class="hero-logo"
-                    onerror="this.style.display='none'"
+                    onerror="this.style.display='none'; document.getElementById('heroLogoFallback').style.display='flex';"
                 >
+                <div id="heroLogoFallback" class="hero-logo-fallback" style="display:none;">
+                    {{ empresa_activa.slug[:2].upper() if empresa_activa.slug else 'EM' }}
+                </div>
             </div>
         </div>
     </section>
@@ -92,8 +96,9 @@
                         <img
                             src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
                             alt="Preview logo"
-                            onerror="this.style.display='none'"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
+                        <div class="empty-preview" style="display:none;">Sin logo cargado</div>
                     </div>
                 </div>
 
@@ -105,8 +110,9 @@
                         <img
                             src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
                             alt="Preview banner"
-                            onerror="this.style.display='none'"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
+                        <div class="empty-preview" style="display:none;">Sin banner cargado</div>
                     </div>
                 </div>
 
@@ -220,7 +226,7 @@
             {% endif %}
         </section>
 
-        <section class="admin-card admin-card--danger">
+        <section class="admin-card admin-card--danger admin-card--compact">
             <div class="card-header-custom">
                 <div>
                     <h2 class="card-title-custom">⚠️ Zona peligrosa</h2>
