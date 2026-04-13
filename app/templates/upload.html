@@ -18,9 +18,7 @@
         <div class="hero-card__content">
             <div class="hero-card__left">
                 <div class="hero-badge">Empresa activa</div>
-
                 <h1 class="hero-title">{{ empresa_activa.nombre }}</h1>
-
                 <p class="hero-subtitle">
                     Gestioná identidad visual, productos e imágenes desde un solo panel.
                 </p>
@@ -78,12 +76,10 @@
         {% if empresa_activa %}
         <section class="admin-card">
             <div class="card-header-custom">
-                <div>
-                    <h2 class="card-title-custom">🖼️ Identidad visual</h2>
-                    <p class="card-subtitle-custom">
-                        Actualizá el logo y el banner de {{ empresa_activa.nombre }}.
-                    </p>
-                </div>
+                <h2 class="card-title-custom">🖼️ Identidad visual</h2>
+                <p class="card-subtitle-custom">
+                    Actualizá el logo y el banner de {{ empresa_activa.nombre }}.
+                </p>
             </div>
 
             <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data" class="stack-form">
@@ -125,12 +121,10 @@
 
         <section class="admin-card">
             <div class="card-header-custom">
-                <div>
-                    <h2 class="card-title-custom">🏢 Crear empresa</h2>
-                    <p class="card-subtitle-custom">
-                        Dala de alta con su nombre, slug, WhatsApp e identidad visual.
-                    </p>
-                </div>
+                <h2 class="card-title-custom">🏢 Crear empresa</h2>
+                <p class="card-subtitle-custom">
+                    Dala de alta con su nombre, slug, WhatsApp e identidad visual.
+                </p>
             </div>
 
             <form action="/empresa/crear_panel" method="post" enctype="multipart/form-data" class="stack-form">
@@ -167,14 +161,12 @@
             </form>
         </section>
 
-        <section class="admin-card">
+        <section class="admin-card admin-card--wide">
             <div class="card-header-custom">
-                <div>
-                    <h2 class="card-title-custom">📦 Carga de productos</h2>
-                    <p class="card-subtitle-custom">
-                        Primero subí el Excel y después el ZIP con las imágenes.
-                    </p>
-                </div>
+                <h2 class="card-title-custom">📦 Carga de productos</h2>
+                <p class="card-subtitle-custom">
+                    Primero subí el Excel y después el ZIP con las imágenes.
+                </p>
             </div>
 
             <div class="tutorial-box">
@@ -189,8 +181,7 @@
                 </div>
             </div>
 
-            <div class="upload-steps">
-
+            <div class="steps-grid">
                 <div class="step-card">
                     <div class="step-number">1</div>
                     <div class="step-content">
@@ -216,7 +207,6 @@
                         </form>
                     </div>
                 </div>
-
             </div>
 
             {% if empresa_activa %}
@@ -226,21 +216,21 @@
             {% endif %}
         </section>
 
-        <section class="admin-card admin-card--danger admin-card--compact">
-            <div class="card-header-custom">
+        <section class="admin-card admin-card--danger admin-card--wide danger-row">
+            <div class="danger-row__content">
                 <div>
                     <h2 class="card-title-custom">⚠️ Zona peligrosa</h2>
                     <p class="card-subtitle-custom">
                         Esta acción elimina todos los productos de la empresa activa.
                     </p>
                 </div>
-            </div>
 
-            <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
-                <button class="btn-danger-soft w-100" type="submit">
-                    Borrar TODOS los productos
-                </button>
-            </form>
+                <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()" class="danger-form">
+                    <button class="btn-danger-soft" type="submit">
+                        Borrar TODOS los productos
+                    </button>
+                </form>
+            </div>
         </section>
     </div>
 
@@ -257,7 +247,6 @@
         </div>
         {% endif %}
     </div>
-
 </div>
 
 <script>
@@ -268,6 +257,5 @@ function confirmarBorrado() {
 
 </body>
 </html>
-
 
 
