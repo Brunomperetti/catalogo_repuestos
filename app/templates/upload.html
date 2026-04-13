@@ -2,417 +2,255 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    
-    <title>Carga de productos - Panel Pro</title>
+    <title>Panel de carga | Catálogo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            background: radial-gradient(circle at top, #0f172a 0%, #020617 100%);
-            color: #e5e7eb;
-            font-family: "Inter", sans-serif;
-            padding: 40px 20px;
-        }
-
-        .panel {
-            max-width: 560px;
-            margin: auto;
-            background: rgba(15,23,42,0.92);
-            border-radius: 22px;
-            padding: 40px 32px 30px 32px;
-            box-shadow: 0 0 50px rgba(0,0,0,0.7);
-            border: 1px solid rgba(56,189,248,0.35);
-        }
-
-        .logo {
-            max-width: 180px;
-            display: block;
-            margin: 0 auto 15px auto;
-            filter: drop-shadow(0 0 18px rgba(56,189,248,0.55));
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 18px;
-            font-size: 1.8rem;
-            font-weight: 700;
-        }
-
-        .tutorial-box {
-            background: rgba(15,23,42,0.95);
-            border-radius: 14px;
-            padding: 12px 14px;
-            border: 1px solid rgba(56,189,248,0.5);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 22px;
-        }
-
-        .tutorial-icon {
-            font-size: 1.6rem;
-        }
-
-        .tutorial-text {
-            font-size: 0.9rem;
-            color: #cbd5e1;
-        }
-
-        .tutorial-link {
-            color: #22c55e;
-            font-weight: 600;
-            text-decoration: none;
-        }
-
-        .tutorial-link:hover {
-            text-decoration: underline;
-        }
-
-        .section-title {
-            margin-top: 12px;
-            margin-bottom: 6px;
-            font-weight: 600;
-            font-size: 0.95rem;
-        }
-
-        input[type="file"] {
-            margin-top: 4px;
-            padding: 10px;
-            background: #0a0f1f;
-            border: 1px solid rgba(56,189,248,0.3);
-            border-radius: 10px;
-            width: 100%;
-            color: #e5e7eb;
-            font-size: 0.9rem;
-        }
-
-        .btn-main {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
-            border: none;
-            width: 100%;
-            padding: 12px;
-            font-weight: bold;
-            color: #052e16;
-            border-radius: 10px;
-            margin-top: 10px;
-            font-size: 0.98rem;
-        }
-
-        .btn-sec {
-            background: rgba(56,189,248,0.25);
-            border: 1px solid rgba(56,189,248,0.5);
-            color: #e0f2fe;
-            width: 100%;
-            padding: 12px;
-            border-radius: 10px;
-            margin-top: 10px;
-            font-size: 0.95rem;
-        }
-
-        .btn-sec-danger {
-            background:#ef4444;
-            border-color:#b91c1c;
-            color:#fee2e2;
-        }
-
-        .btn-sec:hover {
-            background: rgba(56,189,248,0.35);
-            color: #ffffff;
-        }
-
-        .btn-sec-danger:hover {
-            background:#dc2626;
-        }
-
-        .alerts-wrapper {
-            margin-top: 18px;
-        }
-
-        .alert-custom-success {
-            background: rgba(22,163,74,0.16);
-            border: 1px solid rgba(34,197,94,0.7);
-            color: #bbf7d0;
-            font-size: 0.9rem;
-            border-radius: 12px;
-        }
-
-        .alert-custom-error {
-            background: rgba(185,28,28,0.16);
-            border: 1px solid rgba(239,68,68,0.8);
-            color: #fecaca;
-            font-size: 0.9rem;
-            border-radius: 12px;
-        }
-
-        .hint-text {
-            font-size: 0.8rem;
-            color: #9ca3af;
-            margin-top: 4px;
-        }
-       .section-card{
-           background: rgba(15,23,42,0.92);
-           border: 1px solid rgba(56,189,248,0.28);
-           border-radius: 18px;
-           padding: 18px;
-           margin-top: 14px;
-           box-shadow: 0 0 40px rgba(0,0,0,0.45);
-           }
-
-       .section-title2{
-          font-size: 1rem;
-          font-weight: 700;
-          margin: 0 0 6px 0;
-        }
-        
-        .section-sub{
-          font-size: .85rem;
-          color: #9ca3af;
-          margin-bottom: 12px;
-        }
-        
-        .file{
-          margin-top: 4px;
-          padding: 10px 12px;
-          background: rgba(2,6,23,0.65);
-          border: 1px solid rgba(148,163,184,0.25);
-          border-radius: 12px;
-          width: 100%;
-          color: #e5e7eb;
-          font-size: 0.9rem;
-        }
-        
-        .btn-danger-soft{
-          background: rgba(239,68,68,0.12);
-          border: 1px solid rgba(239,68,68,0.55);
-          color: #fecaca;
-          width: 100%;
-          padding: 12px;
-          border-radius: 12px;
-          margin-top: 10px;
-          font-weight: 700;
-        }
-        .btn-danger-soft:hover{
-          background: rgba(239,68,68,0.20);
-        }
-    
-    </style>
+    <link rel="stylesheet" href="/static/css/catalogo.css">
 </head>
 
-<body>
+<body class="admin-body">
 
-{% if empresa_activa %}
-<div style="
-  max-width:560px;
-  margin:0 auto 25px auto;
-  padding:20px;
-  border-radius:18px;
-  background:rgba(15,23,42,0.95);
-  border:1px solid rgba(56,189,248,0.45);
-  box-shadow:0 0 40px rgba(0,0,0,0.6);
-  text-align:center;
-">
+<div class="admin-shell">
 
-  <img src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
-       style="max-height:80px;margin-bottom:10px;"
-       onerror="this.style.display='none'">
+    {% if empresa_activa %}
+    <section class="hero-card">
+        <div class="hero-card__content">
+            <div class="hero-card__left">
+                <div class="hero-badge">Empresa activa</div>
 
-  <h2 style="margin:0;font-size:1.4rem;font-weight:700;">
-    {{ empresa_activa.nombre }}
-  </h2>
+                <h1 class="hero-title">{{ empresa_activa.nombre }}</h1>
+                <p class="hero-subtitle">
+                    Gestioná identidad visual, productos e imágenes desde un solo panel.
+                </p>
 
-  <div style="font-size:0.85rem;color:#9ca3af;margin-bottom:12px;">
-    Empresa activa
-  </div>
+                <div class="hero-actions">
+                    <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-primary-custom">
+                        Ver catálogo 🚗
+                    </a>
+                </div>
+            </div>
 
-  <a href="/catalogo/{{ empresa_activa.slug }}"
-     class="btn btn-success btn-sm"
-     target="_blank">
-    Ir al catálogo 🚗
-  </a>
+            <div class="hero-card__right">
+                <img
+                    src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+                    alt="Logo empresa activa"
+                    class="hero-logo"
+                    onerror="this.style.display='none'"
+                >
+            </div>
+        </div>
+    </section>
+    {% endif %}
 
-</div>
-{% endif %}
+    <section class="toolbar-card">
+        <form method="post" action="/empresa/activar_panel" class="toolbar-form">
+            <div class="toolbar-form__group">
+                <label for="slug" class="field-label">Empresa activa</label>
+                <select id="slug" name="slug" class="input-custom select-custom">
+                    {% for e in empresas %}
+                    <option value="{{ e.slug }}"
+                        {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>
+                        {{ e.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-    
-<div class="panel">
-    
-<form method="post" action="/empresa/activar_panel" style="margin-bottom:20px;">
-  <label style="color:#9ca3af;">Empresa activa</label>
+            <div class="toolbar-actions">
+                <button class="btn-primary-custom" type="submit">Cambiar empresa</button>
 
-  <div style="display:flex;gap:10px;flex-wrap:wrap;">
-    <select name="slug" style="padding:10px;border-radius:10px;min-width:260px;">
-      {% for e in empresas %}
-        <option value="{{ e.slug }}"
-          {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>
-          {{ e.nombre }}
-        </option>
-      {% endfor %}
-    </select>
+                {% if empresa_activa %}
+                <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-secondary-custom">
+                    Ir al catálogo
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
 
-    <button class="btn-main" type="submit">
-    Cambiar
-</button>
+    <div class="admin-grid">
 
-{% if empresa_activa %}
-<a href="/catalogo/{{ empresa_activa.slug }}">
-    <button class="btn-sec" type="button">
-        Ir al catálogo 🚗
-    </button>
-</a>
-{% endif %}
+        {% if empresa_activa %}
+        <section class="admin-card">
+            <div class="card-header-custom">
+                <div>
+                    <h2 class="card-title-custom">🖼️ Identidad visual</h2>
+                    <p class="card-subtitle-custom">
+                        Actualizá el logo y el banner de {{ empresa_activa.nombre }}.
+                    </p>
+                </div>
+            </div>
 
-  </div>
-</form>
+            <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data" class="stack-form">
 
-{% if empresa_activa %}
-<div class="panel-section mb-4">
+                <div class="preview-block">
+                    <label class="field-label">Logo</label>
+                    <input class="input-file-custom" type="file" name="logo" accept="image/*">
 
-  <h2>🖼️ Imágenes de {{ empresa_activa.nombre }}</h2>
+                    <div class="image-preview image-preview--logo">
+                        <img
+                            src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
+                            alt="Preview logo"
+                            onerror="this.style.display='none'"
+                        >
+                    </div>
+                </div>
 
-  <form method="post"
-        action="/empresa/actualizar_imagenes"
-        enctype="multipart/form-data">
+                <div class="preview-block">
+                    <label class="field-label">Banner</label>
+                    <input class="input-file-custom" type="file" name="banner" accept="image/*">
 
-    <!-- LOGO -->
-    <div style="margin-bottom:18px;">
-      <label class="section-title">Logo</label>
-      <input type="file" name="logo" accept="image/*">
+                    <div class="image-preview image-preview--banner">
+                        <img
+                            src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
+                            alt="Preview banner"
+                            onerror="this.style.display='none'"
+                        >
+                    </div>
+                </div>
 
-      <div style="margin-top:10px;">
-        <img
-          src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
-          style="max-height:80px;filter:drop-shadow(0 0 10px rgba(56,189,248,0.4));"
-          onerror="this.style.display='none'">
-      </div>
+                <button class="btn-primary-custom w-100" type="submit">
+                    Guardar cambios
+                </button>
+            </form>
+        </section>
+        {% endif %}
+
+        <section class="admin-card">
+            <div class="card-header-custom">
+                <div>
+                    <h2 class="card-title-custom">🏢 Crear empresa</h2>
+                    <p class="card-subtitle-custom">
+                        Dala de alta con su nombre, slug, WhatsApp e identidad visual.
+                    </p>
+                </div>
+            </div>
+
+            <form action="/empresa/crear_panel" method="post" enctype="multipart/form-data" class="stack-form">
+                <div class="form-grid">
+                    <div>
+                        <label class="field-label">Nombre de la empresa</label>
+                        <input class="input-custom" type="text" name="nombre" placeholder="Automotores Pepe" required>
+                    </div>
+
+                    <div>
+                        <label class="field-label">Slug (URL)</label>
+                        <input class="input-custom" type="text" name="slug" placeholder="automotores-pepe" required>
+                    </div>
+
+                    <div class="full-width">
+                        <label class="field-label">WhatsApp</label>
+                        <input class="input-custom" type="text" name="whatsapp" placeholder="5493510000000">
+                    </div>
+
+                    <div>
+                        <label class="field-label">Logo (PNG / JPG)</label>
+                        <input class="input-file-custom" type="file" name="logo" accept="image/*">
+                    </div>
+
+                    <div>
+                        <label class="field-label">Banner (horizontal)</label>
+                        <input class="input-file-custom" type="file" name="banner" accept="image/*">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary-custom w-100">
+                    Crear empresa
+                </button>
+            </form>
+        </section>
+
+        <section class="admin-card">
+            <div class="card-header-custom">
+                <div>
+                    <h2 class="card-title-custom">📦 Carga de productos</h2>
+                    <p class="card-subtitle-custom">
+                        Primero subí el Excel y después el ZIP con las imágenes.
+                    </p>
+                </div>
+            </div>
+
+            <div class="tutorial-box">
+                <div class="tutorial-icon">📘</div>
+                <div class="tutorial-text">
+                    ¿Primera vez usando el panel?
+                    <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing"
+                       target="_blank"
+                       class="tutorial-link">
+                        Bajá la guía completa de uso
+                    </a>
+                </div>
+            </div>
+
+            <div class="upload-steps">
+
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Subir Excel de productos</h3>
+                        <p>Columnas mínimas: código, descripción y precio. Opcionales: categoría, marca y stock.</p>
+
+                        <form action="/upload_excel" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
+                            <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Subir ZIP de imágenes</h3>
+                        <p>Las imágenes deben llamarse igual que el código del producto. Ejemplo: VR-150.jpg</p>
+
+                        <form action="/upload_zip" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                            <button class="btn-secondary-custom w-100" type="submit">Subir ZIP de imágenes</button>
+                        </form>
+                    </div>
+                </div>
+
+            </div>
+
+            {% if empresa_activa %}
+            <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-outline-custom w-100 mt-3">
+                Ver catálogo completo 🚗
+            </a>
+            {% endif %}
+        </section>
+
+        <section class="admin-card admin-card--danger">
+            <div class="card-header-custom">
+                <div>
+                    <h2 class="card-title-custom">⚠️ Zona peligrosa</h2>
+                    <p class="card-subtitle-custom">
+                        Esta acción elimina todos los productos de la empresa activa.
+                    </p>
+                </div>
+            </div>
+
+            <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
+                <button class="btn-danger-soft w-100" type="submit">
+                    Borrar TODOS los productos
+                </button>
+            </form>
+        </section>
     </div>
 
-    <!-- BANNER -->
-    <div style="margin-bottom:18px;">
-      <label class="section-title">Banner</label>
-      <input type="file" name="banner" accept="image/*">
+    <div class="alerts-wrapper">
+        {% if msg %}
+        <div class="alert alert-custom-success mt-2">
+            {{ msg }}
+        </div>
+        {% endif %}
 
-      <div style="margin-top:10px;">
-        <img
-          src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
-          style="max-width:100%;max-height:140px;border-radius:12px;"
-          onerror="this.style.display='none'">
-      </div>
+        {% if error %}
+        <div class="alert alert-custom-error mt-2">
+            {{ error }}
+        </div>
+        {% endif %}
     </div>
-
-    <button class="btn-main" type="submit">
-      Guardar cambios
-    </button>
-
-  </form>
-</div>
-{% endif %}
-
-
-    <!-- ============================= -->
-<!-- CREAR EMPRESA -->
-<!-- ============================= -->
-<div class="panel-section mb-4">
-    
-  <h2>🏢 Crear empresa</h2>
-
-  <form action="/empresa/crear_panel" method="post" enctype="multipart/form-data">
-
-    <label>Nombre de la empresa</label>
-    <input type="text" name="nombre" placeholder="Automotores Pepe" required>
-
-    <label>Slug (URL)</label>
-    <input type="text" name="slug" placeholder="automotores-pepe" required>
-
-    <label>WhatsApp</label>
-    <input type="text" name="whatsapp" placeholder="5493510000000">
-
-    <label>Logo (PNG / JPG)</label>
-    <input type="file" name="logo" accept="image/*">
-
-    <label>Banner (horizontal)</label>
-    <input type="file" name="banner" accept="image/*">
-
-    <button type="submit" class="btn-main">
-      Crear empresa
-    </button>
-
-  </form>
-</div>
-
-
-    <!-- Logo -->
-<img src="/static/images/logo.png" class="logo" alt="Logo">
-
-<!-- Título -->
-<h1>Carga de productos</h1>
-
-<!-- Cuadro tutorial -->
-<div class="tutorial-box">
-  <div class="tutorial-icon">📘</div>
-  <div class="tutorial-text">
-    ¿Primera vez usando el panel?
-    <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing"
-       target="_blank"
-       class="tutorial-link">
-      Bajá la guía completa de uso
-    </a>
-    para una mejor navegación.
-  </div>
-</div>
-
-<!-- 1) Excel -->
-<div class="section-card">
-  <div class="section-title2">1) Subir Excel de productos</div>
-  <div class="section-sub">Columnas mínimas: código, descripción, precio. (Opcional: categoría, marca, stock)</div>
-
-  <form action="/upload_excel" method="post" enctype="multipart/form-data">
-    <input class="file" type="file" name="file" accept=".xlsx" required>
-    <button class="btn-main mt-3" type="submit">Subir Excel</button>
-  </form>
-</div>
-
-<!-- 2) ZIP -->
-<div class="section-card">
-  <div class="section-title2">2) Subir ZIP de imágenes</div>
-  <div class="section-sub">Las imágenes deben llamarse igual que el código (ej: VR-150.jpg)</div>
-
-  <form action="/upload_zip" method="post" enctype="multipart/form-data">
-    <input class="file" type="file" name="file" accept=".zip" required>
-    <button class="btn-sec mt-3" type="submit">Subir ZIP de imágenes</button>
-  </form>
-
-  {% if empresa_activa %}
-  <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn btn-outline-light w-100 mt-3">
-    Ver catálogo completo 🚗
-  </a>
-  {% endif %}
-</div>
-
-<!-- Danger zone -->
-<div class="section-card">
-  <div class="section-title2">Zona peligrosa</div>
-  <div class="section-sub">Esto borra todos los productos de la empresa activa.</div>
-
-  <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()">
-    <button class="btn-danger-soft" type="submit">Borrar TODOS los productos</button>
-  </form>
-</div>
-
-<!-- Mensajes -->
-<div class="alerts-wrapper">
-  {% if msg %}
-  <div class="alert alert-custom-success mt-2">
-    {{ msg }}
-  </div>
-  {% endif %}
-
-  {% if error %}
-  <div class="alert alert-custom-error mt-2">
-    {{ error }}
-  </div>
-  {% endif %}
-</div>
 
 </div>
 
@@ -424,7 +262,6 @@ function confirmarBorrado() {
 
 </body>
 </html>
-
 
 
 
