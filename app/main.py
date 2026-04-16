@@ -1,7 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi import FastAPI, UploadFile, File, Depends, Request, Form, Query
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import pandas as pd
@@ -9,6 +10,8 @@ import zipfile
 import shutil
 import os
 import re
+import json
+import math
 from urllib.parse import quote
 from pathlib import Path
 from io import BytesIO
@@ -21,6 +24,13 @@ from app.database import SessionLocal, engine, Base
 from app import models
 
 app = FastAPI()
+APP_BUILD = "2026-04-15-cachefix-v3"
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET", "cambia-esto-en-render"),
+    same_site="lax",
+    https_only=False,
+)
 
 # ---------------------------------------------------
 # STARTUP (Render-safe)
@@ -28,6 +38,23 @@ app = FastAPI()
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    print("CODEX_SIGNATURE_2026_04_15")
+    route_paths = sorted(
+        {
+            getattr(r, "path", "")
+            for r in app.routes
+            if getattr(r, "path", "")
+        }
+    )
+    print(
+        "[catalogo] startup build=",
+        APP_BUILD,
+        " commit=",
+        os.getenv("RENDER_GIT_COMMIT", ""),
+        " service=",
+        os.getenv("RENDER_SERVICE_ID", ""),
+    )
+    print("[catalogo] routes=", ", ".join(route_paths))
 
 # ---------------------------------------------------
 # Static & Templates
@@ -47,62 +74,184 @@ def get_db():
 
 
 # ---------------------------------------------------
-# EMPRESA ACTIVA (en memoria)
+# RESOLUCIÓN DE EMPRESA (sin estado global)
 # ---------------------------------------------------
-EMPRESA_ACTIVA_ID = None
+def get_empresa_by_slug(db: Session, slug: str | None):
+    slug = (slug or "").strip().lower()
+    if not slug:
+        return None
+    return db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
 
-def get_empresa_activa(db: Session):
+
+def get_default_empresa(db: Session):
+    return db.query(models.Empresa).order_by(models.Empresa.nombre.asc()).first()
+
+
+def panel_redirect(empresa_slug: str | None = None, msg: str = "", error: str = ""):
+    params = []
+    if empresa_slug:
+        params.append(f"empresa={quote(empresa_slug)}")
+    if msg:
+        params.append(f"msg={quote(msg)}")
+    if error:
+        params.append(f"error={quote(error)}")
+    query = "&".join(params)
+    return RedirectResponse(url=f"/?{query}" if query else "/", status_code=303)
+
+
+def require_admin(request: Request):
+    if request.session.get("is_admin"):
+        return None
+    next_path = quote(request.url.path)
+    return RedirectResponse(url=f"/admin/login?next={next_path}", status_code=303)
+
+
+def clean_text(value, default=""):
+    if value is None or pd.isna(value):
+        return default
+    text = str(value).strip()
+    if text.lower() == "nan":
+        return default
+    return text
+
+
+def clean_price(value, default=0.0):
+    if value is None or pd.isna(value):
+        return default
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else default
+    except Exception:
+        return default
+
+
+def clean_stock(value, default=0):
+    if value is None or pd.isna(value):
+        return default
+    try:
+        return int(float(value))
+    except Exception:
+        return default
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_form(next: str = "/"):
+    return HTMLResponse(
+        f"""
+        <html><body style="font-family:Arial;background:#0b1220;color:#fff;padding:30px;">
+        <h2>Panel privado</h2>
+        <form method="post" action="/admin/login">
+            <input type="hidden" name="next" value="{next}">
+            <label>Contraseña:</label><br>
+            <input type="password" name="password" required style="padding:8px;margin:8px 0;"><br>
+            <button type="submit" style="padding:10px 16px;">Ingresar</button>
+        </form>
+        </body></html>
+        """
+    )
+
+
+@app.post("/admin/login")
+def admin_login(
+    request: Request,
+    password: str = Form(...),
+    next: str = Form("/")
+):
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123").strip()
+
+    if password != admin_password:
+        return RedirectResponse(url="/admin/login?next=/&error=1", status_code=303)
+
+    request.session["is_admin"] = True
+    return RedirectResponse(url=next or "/", status_code=303)
+
+
+@app.get("/admin/logout")
+def admin_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/admin/login", status_code=303)
+
+
+@app.get("/_build")
+@app.get("/build")
+@app.get("/__build")
+def build_info():
+    return {
+        "build": APP_BUILD,
+        "render_git_commit": os.getenv("RENDER_GIT_COMMIT", ""),
+        "render_service_id": os.getenv("RENDER_SERVICE_ID", ""),
+    }
+
+
+@app.get("/healthz")
+def healthz():
+    return {
+        "ok": True,
+        "build": APP_BUILD,
+    }
+
+
+@app.get("/healthz/{tail:path}")
+@app.get("/healthz{tail:path}")
+def healthz_fallback(tail: str):
     """
-    Si hay EMPRESA_ACTIVA_ID seteada, usa esa.
-    Si no, usa la última creada (fallback).
+    Fallback útil para URLs mal pegadas, por ejemplo:
+    /healthzhttps://.../_build
     """
-    global EMPRESA_ACTIVA_ID
-
-    if EMPRESA_ACTIVA_ID is not None:
-        empresa = db.query(models.Empresa).filter(models.Empresa.id == EMPRESA_ACTIVA_ID).first()
-        if empresa:
-            return empresa
-
-    # fallback: última creada
-    return db.query(models.Empresa).order_by(models.Empresa.id.desc()).first()
+    tail = tail or ""
+    if "build" in tail.lower():
+        return RedirectResponse(url="/_build", status_code=307)
+    return JSONResponse(
+        {
+            "ok": True,
+            "build": APP_BUILD,
+            "note": "Ruta inválida detectada. Probá /healthz o /_build.",
+            "tail": tail,
+        }
+    )
 
 
 @app.get("/empresa/activar/{slug}")
 def activar_empresa(slug: str, db: Session = Depends(get_db)):
     """
-    Setea la empresa activa por slug.
-    Luego, /upload_excel y /upload_zip cargan en esa empresa.
+    Endpoint de compatibilidad:
+    redirecciona el panel al contexto de empresa indicado por query string.
     """
-    global EMPRESA_ACTIVA_ID
-
-    slug = (slug or "").strip().lower()
-    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    empresa = get_empresa_by_slug(db, slug)
     if not empresa:
         return {"error": "Empresa no encontrada", "slug": slug}
 
-    EMPRESA_ACTIVA_ID = empresa.id
-    return {"status": "ok", "empresa_activa": {"id": empresa.id, "slug": empresa.slug, "nombre": empresa.nombre}}
+    return RedirectResponse(url=f"/?empresa={quote(empresa.slug)}", status_code=303)
 
 
 @app.get("/empresa/activa")
-def ver_empresa_activa(db: Session = Depends(get_db)):
+def ver_empresa_activa(
+    slug: str | None = Query(default=None),
+    db: Session = Depends(get_db)
+):
     """
     Devuelve qué empresa está activa ahora.
     """
-    empresa = get_empresa_activa(db)
+    empresa = get_empresa_by_slug(db, slug) or get_default_empresa(db)
     if not empresa:
         return {"empresa_activa": None}
     return {"empresa_activa": {"id": empresa.id, "slug": empresa.slug, "nombre": empresa.nombre}}
 
 @app.post("/empresa/actualizar_imagenes")
 async def actualizar_imagenes_empresa(
+    request: Request,
+    empresa_slug: str = Form(...),
     logo: UploadFile = File(None),
     banner: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
-    empresa = get_empresa_activa(db)
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa_slug)
     if not empresa:
-        return RedirectResponse(url="/?error=No hay empresa activa", status_code=303)
+        return panel_redirect(error="Empresa inválida")
 
     base_path = Path("app/static/empresas") / empresa.slug
     base_path.mkdir(parents=True, exist_ok=True)
@@ -115,28 +264,37 @@ async def actualizar_imagenes_empresa(
         with open(base_path / "banner.jpg", "wb") as f:
             f.write(await banner.read())
 
-    return RedirectResponse(url="/?msg=Imágenes actualizadas", status_code=303)
+    return panel_redirect(empresa_slug=empresa.slug, msg="Imágenes actualizadas")
 
 
 @app.post("/empresa/activar_panel")
 def activar_empresa_panel(
+    request: Request,
     slug: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    global EMPRESA_ACTIVA_ID
+    auth = require_admin(request)
+    if auth:
+        return auth
 
-    slug = (slug or "").strip().lower()
-    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    empresa = get_empresa_by_slug(db, slug)
 
     if not empresa:
-        return RedirectResponse(url="/?error=Empresa no encontrada", status_code=303)
+        return panel_redirect(error="Empresa no encontrada")
 
-    EMPRESA_ACTIVA_ID = empresa.id
-    return RedirectResponse(url="/", status_code=303)
+    return panel_redirect(empresa_slug=empresa.slug)
 
 @app.get("/admin/productos", response_class=HTMLResponse)
-def admin_productos(request: Request, db: Session = Depends(get_db)):
-    empresa = get_empresa_activa(db)
+def admin_productos(
+    request: Request,
+    empresa: str | None = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
     if not empresa:
         return HTMLResponse("<h1>No hay empresa activa</h1>", status_code=400)
 
@@ -158,6 +316,7 @@ def admin_productos(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/admin/productos/{producto_id}/actualizar")
 async def actualizar_producto(
+    request: Request,
     producto_id: int,
     descripcion: str = Form(...),
     precio: float = Form(...),
@@ -165,6 +324,10 @@ async def actualizar_producto(
     imagen: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
     if not producto:
         return RedirectResponse(url="/admin/productos", status_code=303)
@@ -196,7 +359,11 @@ async def actualizar_producto(
     return RedirectResponse(url="/admin/productos", status_code=303)
 
 @app.get("/admin/borrar_empresa/{empresa_id}")
-def borrar_empresa_get(empresa_id: int, db: Session = Depends(get_db)):
+def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(get_db)):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
     if not empresa:
         return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
@@ -224,13 +391,24 @@ def borrar_empresa_get(empresa_id: int, db: Session = Depends(get_db)):
 # HOME PANEL
 # ---------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def upload_view(request: Request, msg: str = "", error: str = "", db: Session = Depends(get_db)):
+def upload_view(
+    request: Request,
+    empresa: str = "",
+    msg: str = "",
+    error: str = "",
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     empresas = db.query(models.Empresa).order_by(models.Empresa.nombre).all()
-    empresa_activa = get_empresa_activa(db)
+    empresa_activa = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
     import time
+    using_default_admin_password = os.getenv("ADMIN_PASSWORD", "").strip() == ""
 
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         "upload.html",
         {
             "request": request,
@@ -238,15 +416,23 @@ def upload_view(request: Request, msg: str = "", error: str = "", db: Session = 
             "error": error,
             "empresas": empresas,
             "empresa_activa": empresa_activa,
-            "time": int(time.time())
+            "empresa_query": empresa_activa.slug if empresa_activa else "",
+            "time": int(time.time()),
+            "using_default_admin_password": using_default_admin_password,
+            "app_build": APP_BUILD,
         },
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 # ---------------------------------------------------
 # CREAR EMPRESA
 # ---------------------------------------------------
 @app.post("/empresa/crear_panel")
 async def crear_empresa_panel(
+    request: Request,
     nombre: str = Form(...),
     slug: str = Form(...),
     whatsapp: str = Form(""),
@@ -254,6 +440,10 @@ async def crear_empresa_panel(
     banner: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     nombre = nombre.strip()
     slug = slug.strip().lower()
     slug = re.sub(r"[^a-z0-9\-]", "-", slug)
@@ -288,22 +478,46 @@ async def crear_empresa_panel(
         with open(base_path / "banner.jpg", "wb") as f:
             f.write(await banner.read())
 
-    return RedirectResponse(
-        url="/?msg=Empresa creada correctamente",
-        status_code=303
-    )
+    return panel_redirect(empresa_slug=empresa.slug, msg="Empresa creada correctamente")
+
+
+@app.post("/delete_all_products")
+def delete_all_products(
+    request: Request,
+    empresa_slug: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa_slug)
+    if not empresa:
+        return panel_redirect(error="Empresa inválida.")
+
+    db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id).delete()
+    db.commit()
+
+    return panel_redirect(empresa_slug=empresa.slug, msg=f"Se borraron todos los productos de {empresa.nombre}.")
 
 # ---------------------------------------------------
 # SUBIR EXCEL
 # ---------------------------------------------------
 @app.post("/upload_excel")
-def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_excel(
+    request: Request,
+    empresa_slug: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
 
     try:
-        empresa = get_empresa_activa(db)
+        empresa = get_empresa_by_slug(db, empresa_slug)
         if not empresa:
-            msg = quote("No hay empresa activa. Creá una empresa primero.")
-            return RedirectResponse(url=f"/?error={msg}", status_code=303)
+            return panel_redirect(error="Empresa inválida. Seleccioná una empresa primero.")
 
         IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
         os.makedirs(IMAGES_PATH, exist_ok=True)
@@ -314,20 +528,21 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
         required = ["codigo", "descripcion", "precio"]
         for col in required:
             if col not in df.columns:
-                msg = quote(f"Falta columna obligatoria: {col}")
-                return RedirectResponse(url=f"/?error={msg}", status_code=303)
+                return panel_redirect(empresa_slug=empresa.slug, error=f"Falta columna obligatoria: {col}")
 
         nuevos = 0
         actualizados = 0
 
         for _, row in df.iterrows():
-            codigo = str(row.get("codigo", "")).strip()
+            codigo = clean_text(row.get("codigo", ""))
             if not codigo:
                 continue
 
-            categoria = str(row.get("categoria", "")).strip() or None
-            marca = str(row.get("marca", "")).strip() or None
-            stock = int(row.get("stock", 0)) if not pd.isna(row.get("stock", 0)) else 0
+            categoria = clean_text(row.get("categoria", ""), default="") or None
+            marca = clean_text(row.get("marca", ""), default="") or None
+            stock = clean_stock(row.get("stock", 0), default=0)
+            precio = clean_price(row.get("precio", 0), default=0.0)
+            descripcion = clean_text(row.get("descripcion", ""), default="")
 
             existe = db.query(models.Producto).filter(
                 models.Producto.codigo == codigo,
@@ -335,8 +550,8 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             ).first()
 
             if existe:
-                existe.descripcion = str(row.get("descripcion", existe.descripcion))
-                existe.precio = float(row.get("precio", existe.precio))
+                existe.descripcion = descripcion or existe.descripcion
+                existe.precio = precio
                 existe.categoria = categoria
                 existe.marca = marca
                 existe.stock = stock
@@ -344,10 +559,10 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
             else:
                 producto = models.Producto(
                     codigo=codigo,
-                    descripcion=str(row.get("descripcion", "")),
+                    descripcion=descripcion or codigo,
                     categoria=categoria,
                     marca=marca,
-                    precio=float(row.get("precio", 0)),
+                    precio=precio,
                     stock=stock,
                     empresa_id=empresa.id
                 )
@@ -356,20 +571,29 @@ def upload_excel(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
         db.commit()
 
-        msg = quote(f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}")
-        return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+        return panel_redirect(
+            empresa_slug=empresa.slug,
+            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}"
+        )
 
     except Exception as e:
         print("Error Excel:", e)
-        msg = quote("Error al procesar el Excel.")
-        return RedirectResponse(url=f"/?error={msg}", status_code=303)
+        return panel_redirect(empresa_slug=empresa_slug, error="Error al procesar el Excel.")
 
 
 # ---------------------------------------------------
 # SUBIR ZIP
 # ---------------------------------------------------
 @app.post("/upload_zip")
-def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_zip(
+    request: Request,
+    empresa_slug: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
 
     try:
         temp_path = "temp_images.zip"
@@ -377,10 +601,9 @@ def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        empresa = get_empresa_activa(db)
+        empresa = get_empresa_by_slug(db, empresa_slug)
         if not empresa:
-            msg = quote("No hay empresa activa.")
-            return RedirectResponse(url=f"/?error={msg}", status_code=303)
+            return panel_redirect(error="Empresa inválida.")
 
         IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
         os.makedirs(IMAGES_PATH, exist_ok=True)
@@ -390,13 +613,11 @@ def upload_zip(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
         os.remove(temp_path)
 
-        msg = quote("Imágenes cargadas correctamente.")
-        return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+        return panel_redirect(empresa_slug=empresa.slug, msg="Imágenes cargadas correctamente.")
 
     except Exception as e:
         print("Error ZIP:", e)
-        msg = quote("Error al procesar el ZIP.")
-        return RedirectResponse(url=f"/?error={msg}", status_code=303)
+        return panel_redirect(empresa_slug=empresa_slug, error="Error al procesar el ZIP.")
 
 # ---------------------------------------------------
 # CATÁLOGO
@@ -506,20 +727,150 @@ def catalogo(
         for p in productos
     ]
 
-    return templates.TemplateResponse(
-    "catalogo.html",
-    {
-        "request": request,
-        "productos": productos,
-        "productos_json": productos_json,
-        "empresa": empresa,
-        "categorias": categorias,
-        "categoria_actual": categoria,
-        "marcas": marcas,
-        "marca_actual": marca,
-        "orden_actual": orden,
-        "query": q,
-    },
+    # Export estático para descarga directa (más compatible con navegadores móviles)
+    export_path = Path(f"app/static/empresas/{empresa.slug}")
+    export_path.mkdir(parents=True, exist_ok=True)
+    lista_precios_path = export_path / "lista_precios.json"
+    lista_precios_xlsx_path = export_path / "lista_precios.xlsx"
+
+    lista_payload = {
+        "empresa": {
+            "id": empresa.id,
+            "slug": empresa.slug,
+            "nombre": empresa.nombre,
+            "whatsapp": empresa.whatsapp,
+        },
+        "total_productos": len(productos_json),
+        "productos": productos_json,
+    }
+
+    with open(lista_precios_path, "w", encoding="utf-8") as f:
+        json.dump(lista_payload, f, ensure_ascii=False, indent=2)
+
+    # Export en el mismo formato de subida (Excel)
+    df_export = pd.DataFrame(
+        [
+            {
+                "codigo": p.codigo,
+                "descripcion": p.descripcion,
+                "precio": round(float(p.precio), 2),
+                "categoria": p.categoria or "",
+                "marca": p.marca or "",
+                "stock": p.stock if p.stock is not None else 0,
+            }
+            for p in productos
+        ]
+    )
+    df_export.to_excel(lista_precios_xlsx_path, index=False)
+
+    import time
+
+    response = templates.TemplateResponse(
+        "catalogo.html",
+        {
+            "request": request,
+            "productos": productos,
+            "productos_json": productos_json,
+            "empresa": empresa,
+            "categorias": categorias,
+            "categoria_actual": categoria,
+            "marcas": marcas,
+            "marca_actual": marca,
+            "orden_actual": orden,
+            "query": q,
+            "ts_download": int(time.time()),
+            "app_build": APP_BUILD,
+        },
+    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+@app.get("/catalogo/{slug}/lista_precio.json")
+@app.get("/catalogo/{slug}/lista_precios.json")
+def descargar_lista_precios_json(slug: str, db: Session = Depends(get_db)):
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa:
+        return JSONResponse({"error": "Empresa no encontrada", "slug": slug}, status_code=404)
+
+    productos = (
+        db.query(models.Producto)
+        .filter(
+            models.Producto.empresa_id == empresa.id,
+            models.Producto.activo == True
+        )
+        .order_by(models.Producto.codigo.asc())
+        .all()
+    )
+
+    data = {
+        "empresa": {
+            "id": empresa.id,
+            "slug": empresa.slug,
+            "nombre": empresa.nombre,
+            "whatsapp": empresa.whatsapp,
+        },
+        "total_productos": len(productos),
+        "productos": [
+            {
+                "codigo": p.codigo,
+                "descripcion": p.descripcion,
+                "categoria": p.categoria,
+                "marca": p.marca,
+                "precio": round(float(p.precio), 2),
+                "stock": p.stock,
+                "activo": p.activo,
+            }
+            for p in productos
+        ],
+    }
+
+    filename = f"lista_precio_{empresa.slug}.json"
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/catalogo/{slug}/lista_precios.xlsx")
+def descargar_lista_precios_xlsx(slug: str, db: Session = Depends(get_db)):
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa:
+        return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
+
+    productos = (
+        db.query(models.Producto)
+        .filter(
+            models.Producto.empresa_id == empresa.id,
+            models.Producto.activo == True
+        )
+        .order_by(models.Producto.codigo.asc())
+        .all()
+    )
+
+    df = pd.DataFrame([
+        {
+            "codigo": p.codigo,
+            "descripcion": clean_text(p.descripcion),
+            "precio": clean_price(p.precio, default=0.0),
+            "categoria": clean_text(p.categoria),
+            "marca": clean_text(p.marca),
+            "stock": clean_stock(p.stock, default=0),
+        }
+        for p in productos
+    ])
+
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+
+    filename = f"lista_precios_{empresa.slug}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -568,7 +919,11 @@ async def generar_pdf(data: dict):
 # DEBUG
 # ---------------------------------------------------
 @app.get("/debug/empresas")
-def listar_empresas(db: Session = Depends(get_db)):
+def listar_empresas(request: Request, db: Session = Depends(get_db)):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     return [
         {
             "id": e.id,
@@ -580,7 +935,11 @@ def listar_empresas(db: Session = Depends(get_db)):
     ]
 
 @app.post("/empresa/borrar/{empresa_id}")
-def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
+def borrar_empresa(request: Request, empresa_id: int, db: Session = Depends(get_db)):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
     if not empresa:
         return {"error": "Empresa no encontrada"}
@@ -602,7 +961,11 @@ def borrar_empresa(empresa_id: int, db: Session = Depends(get_db)):
 # DEBUG: LISTAR ARCHIVOS DE IMAGEN DE UNA EMPRESA
 # ---------------------------------------------------
 @app.get("/debug/imagenes/{slug}")
-def debug_imagenes(slug: str):
+def debug_imagenes(request: Request, slug: str):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
     slug = (slug or "").strip().lower()
     path = Path(f"app/static/empresas/{slug}/productos")
     if not path.exists():
@@ -611,4 +974,3 @@ def debug_imagenes(slug: str):
     files = sorted([p.name for p in path.iterdir() if p.is_file()])
     # devolvemos solo los primeros 200 para no explotar la respuesta
     return {"path": str(path), "count": len(files), "files": files[:200]}
-
