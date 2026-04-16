@@ -404,6 +404,82 @@ def activar_empresa_panel(
 
     return panel_redirect(empresa_slug=empresa.slug)
 
+
+@app.post("/empresa/editar_panel")
+def editar_empresa_panel(
+    request: Request,
+    empresa_slug_actual: str = Form(...),
+    nombre: str = Form(...),
+    whatsapp: str = Form(""),
+    editar_slug: str = Form("0"),
+    nuevo_slug: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa_slug_actual)
+    if not empresa:
+        return panel_redirect(error="Empresa no encontrada.")
+
+    nombre_limpio = clean_text(nombre, default="")
+    whatsapp_limpio = clean_text(whatsapp, default="") or None
+    if not nombre_limpio:
+        return panel_redirect(empresa_slug=empresa.slug, error="El nombre de la empresa no puede estar vacío.")
+
+    slug_original = empresa.slug
+    slug_final = slug_original
+
+    if editar_slug == "1":
+        nuevo_slug_limpio = clean_text(nuevo_slug, default="").lower()
+        nuevo_slug_limpio = re.sub(r"[^a-z0-9\-]", "-", nuevo_slug_limpio)
+        nuevo_slug_limpio = re.sub(r"-+", "-", nuevo_slug_limpio).strip("-")
+
+        if not nuevo_slug_limpio:
+            return panel_redirect(empresa_slug=slug_original, error="Slug inválido.")
+
+        if nuevo_slug_limpio != slug_original:
+            existe = db.query(models.Empresa).filter(models.Empresa.slug == nuevo_slug_limpio).first()
+            if existe:
+                return panel_redirect(empresa_slug=slug_original, error="Ese slug ya existe.")
+            slug_final = nuevo_slug_limpio
+
+    empresa.nombre = nombre_limpio
+    empresa.whatsapp = whatsapp_limpio
+
+    if slug_final != slug_original:
+        old_static_dir = Path("app/static/empresas") / slug_original
+        new_static_dir = Path("app/static/empresas") / slug_final
+        if old_static_dir.exists():
+            if new_static_dir.exists():
+                shutil.rmtree(new_static_dir)
+            old_static_dir.rename(new_static_dir)
+
+        old_storage_dir = MEDIA_BASE_DIR / slug_original
+        new_storage_dir = MEDIA_BASE_DIR / slug_final
+        if old_storage_dir.exists():
+            if new_storage_dir.exists():
+                shutil.rmtree(new_storage_dir)
+            old_storage_dir.rename(new_storage_dir)
+
+        if empresa.logo_url:
+            empresa.logo_url = empresa.logo_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+        if empresa.banner_url:
+            empresa.banner_url = empresa.banner_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+
+        productos = db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id).all()
+        for p in productos:
+            if p.imagen_url:
+                p.imagen_url = p.imagen_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+
+        empresa.slug = slug_final
+
+    db.add(empresa)
+    db.commit()
+
+    return panel_redirect(empresa_slug=empresa.slug, msg="Empresa actualizada correctamente.")
+
 @app.get("/admin/productos", response_class=HTMLResponse)
 def admin_productos(
     request: Request,
