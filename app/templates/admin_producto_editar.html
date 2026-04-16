@@ -10,10 +10,10 @@
 <div class="container py-4" style="max-width: 760px;">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h4 m-0">Editar producto {{ producto.codigo }}</h1>
-        <a href="/admin/productos?empresa={{ empresa.slug }}" class="btn btn-outline-light">Volver al listado</a>
+        <a href="{% if is_admin %}/admin/productos{% else %}/cliente/productos{% endif %}?empresa={{ empresa.slug }}" class="btn btn-outline-light">Volver al listado</a>
     </div>
 
-    <form method="post" action="/admin/productos/{{ producto.id }}/actualizar" enctype="multipart/form-data" class="card card-body bg-black border-secondary gap-3">
+    <form method="post" action="{% if is_admin %}/admin/productos/{{ producto.id }}/actualizar{% else %}/cliente/productos/{{ producto.id }}/actualizar{% endif %}" enctype="multipart/form-data" class="card card-body bg-black border-secondary gap-3">
         <input type="hidden" name="empresa_slug" value="{{ empresa.slug }}">
 
         <div>

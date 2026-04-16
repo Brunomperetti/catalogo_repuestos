@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de carga | Catálogo</title>
+    <title>Panel admin | Catálogo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -73,11 +73,16 @@
                     Ir al catálogo
                 </a>
                 {% endif %}
+                <a href="/logout" class="btn-outline-custom">Cerrar sesión</a>
             </div>
         </form>
     </section>
 
     <div class="admin-grid">
+        <section class="admin-card admin-card--wide section-header-card">
+            <h2 class="section-header-title">Gestión de empresa</h2>
+            <p class="section-header-subtitle">Administración completa de empresas y su configuración.</p>
+        </section>
 
         {% if empresa_activa %}
         <section class="admin-card">
@@ -163,6 +168,11 @@
                 </button>
             </form>
         </section>
+
+        <section class="admin-card admin-card--wide section-header-card">
+            <h2 class="section-header-title">Productos</h2>
+            <p class="section-header-subtitle">Carga masiva, imágenes y edición del catálogo de la empresa activa.</p>
+        </section>
         {% endif %}
 
         <section class="admin-card">
@@ -204,6 +214,41 @@
                 <button type="submit" class="btn-primary-custom w-100">
                     Crear empresa
                 </button>
+            </form>
+        </section>
+
+        <section class="admin-card">
+            <div class="card-header-custom">
+                <h2 class="card-title-custom">👤 Usuarios y accesos</h2>
+                <p class="card-subtitle-custom">
+                    Creá accesos admin o cliente (cliente ligado a una sola empresa).
+                </p>
+            </div>
+            <form action="/admin/usuarios/crear" method="post" class="stack-form">
+                <div>
+                    <label class="field-label">Usuario</label>
+                    <input class="input-custom" type="text" name="username" required>
+                </div>
+                <div>
+                    <label class="field-label">Contraseña (mín. 6)</label>
+                    <input class="input-custom" type="password" name="password" minlength="6" required>
+                </div>
+                <div>
+                    <label class="field-label">Rol</label>
+                    <select name="rol" class="input-custom select-custom">
+                        <option value="cliente" selected>cliente</option>
+                        <option value="admin">admin</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Empresa para cliente</label>
+                    <select name="empresa_slug" class="input-custom select-custom">
+                        {% for e in empresas %}
+                        <option value="{{ e.slug }}" {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>{{ e.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-secondary-custom w-100">Crear usuario</button>
             </form>
         </section>
 
@@ -268,6 +313,11 @@
                 Ver catálogo completo 🚗
             </a>
             {% endif %}
+        </section>
+
+        <section class="admin-card admin-card--wide section-header-card">
+            <h2 class="section-header-title">Herramientas avanzadas</h2>
+            <p class="section-header-subtitle">Backups, restore y acciones globales de mantenimiento.</p>
         </section>
 
         <section class="admin-card admin-card--wide">

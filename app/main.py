@@ -14,6 +14,9 @@ import re
 import json
 import math
 import uuid
+import hashlib
+import hmac
+import secrets
 from urllib.parse import quote
 from pathlib import Path
 from io import BytesIO
@@ -47,6 +50,8 @@ app.add_middleware(
 def on_startup():
     Base.metadata.create_all(bind=engine)
     ensure_empresa_media_columns()
+    ensure_usuario_columns()
+    ensure_default_admin_user()
     print("CODEX_SIGNATURE_2026_04_15")
     route_paths = sorted(
         {
@@ -82,6 +87,22 @@ def ensure_empresa_media_columns():
         if "banner_url" not in columns:
             conn.execute(text("ALTER TABLE empresas ADD COLUMN banner_url VARCHAR"))
 
+
+def ensure_usuario_columns():
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "usuarios" not in tables:
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("usuarios")}
+    with engine.begin() as conn:
+        if "rol" not in columns:
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN rol VARCHAR DEFAULT 'cliente'"))
+        if "activo" not in columns:
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN activo BOOLEAN DEFAULT TRUE"))
+        if "empresa_id" not in columns:
+            conn.execute(text("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER"))
+
 # ---------------------------------------------------
 # DB Dependency
 # ---------------------------------------------------
@@ -107,7 +128,7 @@ def get_default_empresa(db: Session):
     return db.query(models.Empresa).order_by(models.Empresa.nombre.asc()).first()
 
 
-def panel_redirect(empresa_slug: str | None = None, msg: str = "", error: str = ""):
+def panel_redirect(empresa_slug: str | None = None, msg: str = "", error: str = "", path: str = "/admin"):
     params = []
     if empresa_slug:
         params.append(f"empresa={quote(empresa_slug)}")
@@ -116,14 +137,100 @@ def panel_redirect(empresa_slug: str | None = None, msg: str = "", error: str = 
     if error:
         params.append(f"error={quote(error)}")
     query = "&".join(params)
-    return RedirectResponse(url=f"/?{query}" if query else "/", status_code=303)
+    return RedirectResponse(url=f"{path}?{query}" if query else path, status_code=303)
 
 
-def require_admin(request: Request):
-    if request.session.get("is_admin"):
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 310000)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        _, salt, saved = password_hash.split("$", 2)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 310000).hex()
+        return hmac.compare_digest(digest, saved)
+    except Exception:
+        return False
+
+
+def ensure_default_admin_user():
+    username = (os.getenv("ADMIN_USER", "admin").strip() or "admin").lower()
+    raw_password = os.getenv("ADMIN_PASSWORD", "admin123").strip() or "admin123"
+    with SessionLocal() as db:
+        existing = db.query(models.Usuario).filter(models.Usuario.username == username).first()
+        if existing:
+            return
+        user = models.Usuario(
+            username=username,
+            password_hash=hash_password(raw_password),
+            rol="admin",
+            activo=True,
+            empresa_id=None,
+        )
+        db.add(user)
+        db.commit()
+
+
+def get_current_user(request: Request, db: Session) -> models.Usuario | None:
+    user_id = request.session.get("user_id")
+    if not user_id:
         return None
-    next_path = quote(request.url.path)
-    return RedirectResponse(url=f"/admin/login?next={next_path}", status_code=303)
+    return db.query(models.Usuario).filter(models.Usuario.id == user_id, models.Usuario.activo == True).first()
+
+
+def require_login(request: Request, db: Session):
+    user = get_current_user(request, db)
+    if user:
+        return user
+    next_path = quote(str(request.url.path))
+    return RedirectResponse(url=f"/login?next={next_path}", status_code=303)
+
+
+def require_admin(request: Request, db: Session):
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+    if user.rol != "admin":
+        return RedirectResponse(url="/cliente?error=No tenés permisos para acceder al panel admin", status_code=303)
+    return user
+
+
+def get_user_empresa(user: models.Usuario, db: Session):
+    if user.rol == "cliente":
+        if not user.empresa_id:
+            return None
+        return db.query(models.Empresa).filter(models.Empresa.id == user.empresa_id).first()
+    return None
+
+
+def resolve_empresa_for_user(user: models.Usuario, db: Session, slug: str | None):
+    if user.rol == "admin":
+        return get_empresa_by_slug(db, slug) or get_default_empresa(db)
+    return get_user_empresa(user, db)
+
+
+def get_dashboard_path(user: models.Usuario) -> str:
+    return "/admin" if user.rol == "admin" else "/cliente"
+
+
+def redirect_for_user(user: models.Usuario, empresa_slug: str | None = None, msg: str = "", error: str = ""):
+    return panel_redirect(
+        empresa_slug=empresa_slug,
+        msg=msg,
+        error=error,
+        path=get_dashboard_path(user),
+    )
+
+
+def can_access_empresa(user: models.Usuario, empresa_slug: str | None, db: Session):
+    empresa = resolve_empresa_for_user(user, db, empresa_slug)
+    if not empresa:
+        return None
+    if user.rol == "cliente" and user.empresa_id != empresa.id:
+        return None
+    return empresa
 
 
 def clean_text(value, default=""):
@@ -256,42 +363,55 @@ def get_empresa_banner_url(empresa: models.Empresa | None) -> str:
     return "/static/images/banner.jpg"
 
 
-@app.get("/admin/login", response_class=HTMLResponse)
-def admin_login_form(next: str = "/"):
-    return HTMLResponse(
-        f"""
-        <html><body style="font-family:Arial;background:#0b1220;color:#fff;padding:30px;">
-        <h2>Panel privado</h2>
-        <form method="post" action="/admin/login">
-            <input type="hidden" name="next" value="{next}">
-            <label>Contraseña:</label><br>
-            <input type="password" name="password" required style="padding:8px;margin:8px 0;"><br>
-            <button type="submit" style="padding:10px 16px;">Ingresar</button>
-        </form>
-        </body></html>
-        """
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/", error: str = ""):
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "next": next,
+            "error": error,
+        },
     )
 
 
-@app.post("/admin/login")
-def admin_login(
+@app.post("/login")
+def login(
     request: Request,
+    username: str = Form(...),
     password: str = Form(...),
-    next: str = Form("/")
+    next: str = Form("/"),
+    db: Session = Depends(get_db),
 ):
-    admin_password = os.getenv("ADMIN_PASSWORD", "admin123").strip()
+    username_clean = clean_text(username, default="").lower()
+    user = db.query(models.Usuario).filter(models.Usuario.username == username_clean, models.Usuario.activo == True).first()
+    if not user or not verify_password(password, user.password_hash):
+        return RedirectResponse(url=f"/login?next={quote(next or '/admin')}&error=Credenciales inválidas", status_code=303)
 
-    if password != admin_password:
-        return RedirectResponse(url="/admin/login?next=/&error=1", status_code=303)
+    request.session.clear()
+    request.session["user_id"] = user.id
+    request.session["role"] = user.rol
+    request.session["empresa_id"] = user.empresa_id
 
-    request.session["is_admin"] = True
-    return RedirectResponse(url=next or "/", status_code=303)
+    if next and next not in {"/", "/login"}:
+        return RedirectResponse(url=next, status_code=303)
+    return RedirectResponse(url=get_dashboard_path(user), status_code=303)
+
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
+
+@app.get("/admin/login")
+def admin_login_compat():
+    return RedirectResponse(url="/login", status_code=303)
 
 
 @app.get("/admin/logout")
-def admin_logout(request: Request):
-    request.session.clear()
-    return RedirectResponse(url="/admin/login", status_code=303)
+def admin_logout_compat():
+    return RedirectResponse(url="/logout", status_code=303)
 
 
 @app.get("/_build")
@@ -334,7 +454,7 @@ def healthz_fallback(tail: str):
 
 
 @app.get("/empresa/activar/{slug}")
-def activar_empresa(slug: str, db: Session = Depends(get_db)):
+def activar_empresa(slug: str, request: Request, db: Session = Depends(get_db)):
     """
     Endpoint de compatibilidad:
     redirecciona el panel al contexto de empresa indicado por query string.
@@ -343,7 +463,10 @@ def activar_empresa(slug: str, db: Session = Depends(get_db)):
     if not empresa:
         return {"error": "Empresa no encontrada", "slug": slug}
 
-    return RedirectResponse(url=f"/?empresa={quote(empresa.slug)}", status_code=303)
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url=f"{get_dashboard_path(user)}?empresa={quote(empresa.slug)}", status_code=303)
 
 
 @app.get("/empresa/activa")
@@ -367,8 +490,8 @@ async def actualizar_imagenes_empresa(
     banner: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa = get_empresa_by_slug(db, empresa_slug)
@@ -393,16 +516,19 @@ def activar_empresa_panel(
     slug: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    if user.rol != "admin":
+        return redirect_for_user(user, error="No tenés permisos para cambiar de empresa")
 
     empresa = get_empresa_by_slug(db, slug)
 
     if not empresa:
-        return panel_redirect(error="Empresa no encontrada")
+        return redirect_for_user(user, error="Empresa no encontrada")
 
-    return panel_redirect(empresa_slug=empresa.slug)
+    return redirect_for_user(user, empresa_slug=empresa.slug)
 
 
 @app.post("/empresa/editar_panel")
@@ -415,8 +541,8 @@ def editar_empresa_panel(
     nuevo_slug: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa = get_empresa_by_slug(db, empresa_slug_actual)
@@ -481,17 +607,18 @@ def editar_empresa_panel(
     return panel_redirect(empresa_slug=empresa.slug, msg="Empresa actualizada correctamente.")
 
 @app.get("/admin/productos", response_class=HTMLResponse)
+@app.get("/cliente/productos", response_class=HTMLResponse)
 def admin_productos(
     request: Request,
     empresa: str | None = Query(default=None),
     q: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
-    empresa = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
+    empresa = can_access_empresa(user, empresa, db)
     if not empresa:
         return HTMLResponse("<h1>No hay empresa activa</h1>", status_code=400)
 
@@ -512,20 +639,22 @@ def admin_productos(
             "empresa": empresa,
             "productos": productos,
             "query": q,
+            "is_admin": user.rol == "admin",
         },
     )
 
 
 @app.get("/admin/productos/{producto_id}/editar", response_class=HTMLResponse)
+@app.get("/cliente/productos/{producto_id}/editar", response_class=HTMLResponse)
 def editar_producto_view(
     request: Request,
     producto_id: int,
     empresa: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
     producto = (
         db.query(models.Producto)
@@ -533,7 +662,10 @@ def editar_producto_view(
         .first()
     )
     if not producto:
-        return RedirectResponse(url="/admin/productos", status_code=303)
+        return RedirectResponse(url="/cliente/productos", status_code=303)
+
+    if user.rol == "cliente" and user.empresa_id != producto.empresa_id:
+        return RedirectResponse(url="/cliente?error=No autorizado para editar este producto", status_code=303)
 
     empresa_ctx = get_empresa_by_slug(db, empresa) if empresa else producto.empresa
     if not empresa_ctx:
@@ -545,11 +677,13 @@ def editar_producto_view(
             "request": request,
             "producto": producto,
             "empresa": empresa_ctx,
+            "is_admin": user.rol == "admin",
         },
     )
 
 
 @app.post("/admin/productos/{producto_id}/actualizar")
+@app.post("/cliente/productos/{producto_id}/actualizar")
 async def actualizar_producto(
     request: Request,
     producto_id: int,
@@ -564,13 +698,15 @@ async def actualizar_producto(
     imagen: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
     producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
     if not producto:
-        return RedirectResponse(url="/admin/productos", status_code=303)
+        return RedirectResponse(url="/cliente/productos", status_code=303)
+    if user.rol == "cliente" and user.empresa_id != producto.empresa_id:
+        return RedirectResponse(url="/cliente?error=No autorizado para editar este producto", status_code=303)
 
     producto.codigo = clean_text(codigo, default=producto.codigo) or producto.codigo
     producto.descripcion = descripcion
@@ -601,13 +737,14 @@ async def actualizar_producto(
 
     db.commit()
     target_empresa = empresa_slug or (producto.empresa.slug if producto.empresa else "")
-    redirect_target = f"/admin/productos?empresa={quote(target_empresa)}" if target_empresa else "/admin/productos"
+    products_path = "/admin/productos" if user.rol == "admin" else "/cliente/productos"
+    redirect_target = f"{products_path}?empresa={quote(target_empresa)}" if target_empresa else products_path
     return RedirectResponse(url=redirect_target, status_code=303)
 
 @app.get("/admin/borrar_empresa/{empresa_id}")
 def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(get_db)):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
@@ -637,24 +774,32 @@ def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(
 
 
 # ---------------------------------------------------
-# HOME PANEL
+# HOME / DASHBOARDS
 # ---------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def upload_view(
+def home_router(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url=get_dashboard_path(user), status_code=303)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_panel(
     request: Request,
     empresa: str = "",
     msg: str = "",
     error: str = "",
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_admin(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
     empresas = db.query(models.Empresa).order_by(models.Empresa.nombre).all()
     empresa_activa = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
     import time
-    using_default_admin_password = os.getenv("ADMIN_PASSWORD", "").strip() == ""
+    using_default_admin_password = os.getenv("ADMIN_PASSWORD", "").strip() in {"", "admin123"}
 
 
     response = templates.TemplateResponse(
@@ -670,6 +815,7 @@ def upload_view(
             "empresa_banner_url": get_empresa_banner_url(empresa_activa),
             "time": int(time.time()),
             "using_default_admin_password": using_default_admin_password,
+            "admin_username": os.getenv("ADMIN_USER", "admin"),
             "app_build": APP_BUILD,
         },
     )
@@ -677,6 +823,45 @@ def upload_view(
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.get("/cliente", response_class=HTMLResponse)
+def cliente_panel(
+    request: Request,
+    msg: str = "",
+    error: str = "",
+    db: Session = Depends(get_db),
+):
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    empresa_activa = resolve_empresa_for_user(user, db, None)
+    if not empresa_activa:
+        return HTMLResponse("<h1>Usuario sin empresa asignada</h1>", status_code=403)
+
+    import time
+    response = templates.TemplateResponse(
+        "cliente_panel.html",
+        {
+            "request": request,
+            "msg": msg,
+            "error": error,
+            "empresa_activa": empresa_activa,
+            "empresa_query": empresa_activa.slug,
+            "empresa_logo_url": get_empresa_logo_url(empresa_activa),
+            "time": int(time.time()),
+            "app_build": APP_BUILD,
+            "is_admin_view": user.rol == "admin",
+        },
+    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
+@app.get("/panel")
+def panel_alias():
+    return RedirectResponse(url="/cliente", status_code=303)
 
 # ---------------------------------------------------
 # CREAR EMPRESA
@@ -691,8 +876,8 @@ async def crear_empresa_panel(
     banner: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     nombre = nombre.strip()
@@ -733,14 +918,57 @@ async def crear_empresa_panel(
     return panel_redirect(empresa_slug=empresa.slug, msg="Empresa creada correctamente")
 
 
+@app.post("/admin/usuarios/crear")
+def crear_usuario_cliente(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    rol: str = Form("cliente"),
+    empresa_slug: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
+        return auth
+
+    username_clean = clean_text(username, default="").lower()
+    if not username_clean or len(password) < 6:
+        return panel_redirect(error="Usuario inválido o contraseña muy corta (mínimo 6).")
+
+    if db.query(models.Usuario).filter(models.Usuario.username == username_clean).first():
+        return panel_redirect(error="Ese usuario ya existe.")
+
+    role_clean = "admin" if rol == "admin" else "cliente"
+    empresa_id = None
+    if role_clean == "cliente":
+        empresa = get_empresa_by_slug(db, empresa_slug)
+        if not empresa:
+            return panel_redirect(error="Para cliente debés seleccionar empresa.")
+        empresa_id = empresa.id
+
+    user = models.Usuario(
+        username=username_clean,
+        password_hash=hash_password(password),
+        rol=role_clean,
+        activo=True,
+        empresa_id=empresa_id,
+    )
+    db.add(user)
+    db.commit()
+    return panel_redirect(
+        empresa_slug=empresa_slug or None,
+        msg=f"Usuario '{username_clean}' creado con rol {role_clean}."
+    )
+
+
 @app.post("/delete_all_products")
 def delete_all_products(
     request: Request,
     empresa_slug: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa = get_empresa_by_slug(db, empresa_slug)
@@ -762,14 +990,14 @@ def upload_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
     try:
-        empresa = get_empresa_by_slug(db, empresa_slug)
+        empresa = can_access_empresa(user, empresa_slug, db)
         if not empresa:
-            return panel_redirect(error="Empresa inválida. Seleccioná una empresa primero.")
+            return redirect_for_user(user, error="Empresa inválida. Seleccioná una empresa primero.")
 
         filename = (file.filename or "").lower()
         if not filename.endswith((".xlsx", ".xls")):
@@ -781,7 +1009,7 @@ def upload_excel(
         required = ["codigo", "descripcion", "precio"]
         for col in required:
             if col not in df.columns:
-                return panel_redirect(empresa_slug=empresa.slug, error=f"Falta columna obligatoria: {col}")
+                return redirect_for_user(user, empresa_slug=empresa.slug, error=f"Falta columna obligatoria: {col}")
 
         nuevos = 0
         actualizados = 0
@@ -824,14 +1052,15 @@ def upload_excel(
 
         db.commit()
 
-        return panel_redirect(
+        return redirect_for_user(
+            user,
             empresa_slug=empresa.slug,
-            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}. Revisalos en /admin/productos."
+            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}."
         )
 
     except Exception as e:
         print("Error Excel:", e)
-        return panel_redirect(empresa_slug=empresa_slug, error="Error al procesar el Excel.")
+        return redirect_for_user(user, empresa_slug=empresa_slug, error="Error al procesar el Excel.")
 
 
 # ---------------------------------------------------
@@ -844,9 +1073,9 @@ def upload_zip(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
-        return auth
+    user = require_login(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
 
     try:
         temp_path = "temp_images.zip"
@@ -854,9 +1083,9 @@ def upload_zip(
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        empresa = get_empresa_by_slug(db, empresa_slug)
+        empresa = can_access_empresa(user, empresa_slug, db)
         if not empresa:
-            return panel_redirect(error="Empresa inválida.")
+            return redirect_for_user(user, error="Empresa inválida.")
 
         IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
         os.makedirs(IMAGES_PATH, exist_ok=True)
@@ -866,11 +1095,11 @@ def upload_zip(
 
         os.remove(temp_path)
 
-        return panel_redirect(empresa_slug=empresa.slug, msg="Imágenes cargadas correctamente.")
+        return redirect_for_user(user, empresa_slug=empresa.slug, msg="Imágenes cargadas correctamente.")
 
     except Exception as e:
         print("Error ZIP:", e)
-        return panel_redirect(empresa_slug=empresa_slug, error="Error al procesar el ZIP.")
+        return redirect_for_user(user, empresa_slug=empresa_slug, error="Error al procesar el ZIP.")
 
 
 @app.get("/admin/empresa/exportar")
@@ -879,8 +1108,8 @@ def exportar_empresa_completa(
     empresa: str | None = Query(default=None),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa_obj = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
@@ -946,8 +1175,8 @@ def importar_empresa_completa(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     mode = (import_mode or "duplicate").strip().lower()
@@ -1346,8 +1575,8 @@ async def generar_pdf(data: dict):
 # ---------------------------------------------------
 @app.get("/debug/empresas")
 def listar_empresas(request: Request, db: Session = Depends(get_db)):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     return [
@@ -1362,8 +1591,8 @@ def listar_empresas(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/empresa/borrar/{empresa_id}")
 def borrar_empresa(request: Request, empresa_id: int, db: Session = Depends(get_db)):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
@@ -1391,8 +1620,8 @@ def borrar_empresa(request: Request, empresa_id: int, db: Session = Depends(get_
 # ---------------------------------------------------
 @app.get("/debug/imagenes/{slug}")
 def debug_imagenes(request: Request, slug: str):
-    auth = require_admin(request)
-    if auth:
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
         return auth
 
     slug = (slug or "").strip().lower()

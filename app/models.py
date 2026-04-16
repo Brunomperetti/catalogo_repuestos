@@ -18,6 +18,7 @@ class Empresa(Base):
         back_populates="empresa",
         cascade="all, delete-orphan"
     )
+    usuarios = relationship("Usuario", back_populates="empresa")
 
 
 class Producto(Base):
@@ -46,3 +47,20 @@ class Producto(Base):
 
     empresa = relationship("Empresa", back_populates="productos")
 
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+    rol = Column(String, nullable=False, default="cliente")  # admin | cliente
+    activo = Column(Boolean, nullable=False, default=True)
+
+    empresa_id = Column(
+        Integer,
+        ForeignKey("empresas.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    empresa = relationship("Empresa", back_populates="usuarios")
