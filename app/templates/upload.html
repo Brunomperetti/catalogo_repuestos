@@ -12,6 +12,12 @@
 <body class="admin-body">
 
 <div class="admin-shell">
+    <div style="font-size:12px;opacity:.7;margin-bottom:8px;">Build: {{ app_build }}</div>
+    {% if using_default_admin_password %}
+    <div class="alert alert-warning">
+        ⚠️ Estás usando la clave admin por defecto (<b>admin123</b>). Configurá <code>ADMIN_PASSWORD</code> en Render.
+    </div>
+    {% endif %}
 
     {% if empresa_activa %}
     <section class="hero-card">
@@ -83,6 +89,7 @@
             </div>
 
             <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data" class="stack-form">
+                <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
 
                 <div class="preview-block">
                     <label class="field-label">Logo</label>
@@ -90,7 +97,7 @@
 
                     <div class="image-preview image-preview--logo">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ request.state.time if request.state.time else '' }}"
+                            src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
                             alt="Preview logo"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -104,7 +111,7 @@
 
                     <div class="image-preview image-preview--banner">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ request.state.time if request.state.time else '' }}"
+                            src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ time }}"
                             alt="Preview banner"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -189,6 +196,7 @@
                         <p>Columnas mínimas: código, descripción y precio. Opcionales: categoría, marca y stock.</p>
 
                         <form action="/upload_excel" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
                             <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
                             <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
                         </form>
@@ -202,6 +210,7 @@
                         <p>Las imágenes deben llamarse igual que el código del producto. Ejemplo: VR-150.jpg</p>
 
                         <form action="/upload_zip" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
                             <input class="input-file-custom" type="file" name="file" accept=".zip" required>
                             <button class="btn-secondary-custom w-100" type="submit">Subir ZIP de imágenes</button>
                         </form>
@@ -226,6 +235,7 @@
                 </div>
 
                 <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()" class="danger-form">
+                    <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
                     <button class="btn-danger-soft" type="submit">
                         Borrar TODOS los productos
                     </button>
@@ -257,5 +267,3 @@ function confirmarBorrado() {
 
 </body>
 </html>
-
-
