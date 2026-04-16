@@ -10,6 +10,8 @@ class Empresa(Base):
     nombre = Column(String, nullable=False)
     slug = Column(String, nullable=False, unique=True)
     whatsapp = Column(String, nullable=True)
+    logo_url = Column(String, nullable=True)
+    banner_url = Column(String, nullable=True)
 
     productos = relationship(
         "Producto",
@@ -43,5 +45,4 @@ class Producto(Base):
     imagen_url = Column(String, nullable=True)
 
     empresa = relationship("Empresa", back_populates="productos")
-
 

@@ -38,7 +38,7 @@
 
             <div class="hero-card__right">
                 <img
-                    src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+                    src="{{ empresa_logo_url }}?ts={{ time }}"
                     alt="Logo empresa activa"
                     class="hero-logo"
                     onerror="this.style.display='none'; document.getElementById('heroLogoFallback').style.display='flex';"
@@ -97,7 +97,7 @@
 
                     <div class="image-preview image-preview--logo">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+                            src="{{ empresa_logo_url }}?ts={{ time }}"
                             alt="Preview logo"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -111,7 +111,7 @@
 
                     <div class="image-preview image-preview--banner">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ time }}"
+                            src="{{ empresa_banner_url }}?ts={{ time }}"
                             alt="Preview banner"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -200,6 +200,12 @@
                             <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
                             <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
                         </form>
+
+                        {% if empresa_activa %}
+                        <a href="/admin/productos?empresa={{ empresa_activa.slug }}" class="btn-outline-custom w-100 mt-3 d-inline-block text-center">
+                            Ver / editar productos importados
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -224,6 +230,49 @@
             </a>
             {% endif %}
         </section>
+
+        {% if empresa_activa %}
+        <section class="admin-card admin-card--wide">
+            <div class="card-header-custom">
+                <h2 class="card-title-custom">🗂️ Backup / restauración de empresa</h2>
+                <p class="card-subtitle-custom">
+                    Exportá o importá empresa (datos + productos + logo + banner) en formato ZIP compatible.
+                </p>
+            </div>
+
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">A</div>
+                    <div class="step-content">
+                        <h3>Exportar empresa</h3>
+                        <p>Descarga un ZIP con <b>empresa.json</b> y assets (logo/banner si existen).</p>
+                        <a class="btn-primary-custom w-100 d-inline-block text-center"
+                           href="/admin/empresa/exportar?empresa_slug={{ empresa_activa.slug }}">
+                            Exportar {{ empresa_activa.slug }}
+                        </a>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-number">B</div>
+                    <div class="step-content">
+                        <h3>Importar empresa</h3>
+                        <p>Subí el ZIP exportado por el sistema para restaurar o duplicar una empresa.</p>
+
+                        <form action="/admin/empresa/importar" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                            <select class="input-custom select-custom" name="import_mode">
+                                <option value="duplicate">Si existe slug, crear copia segura</option>
+                                <option value="replace">Reemplazar empresa existente con ese slug</option>
+                            </select>
+                            <button class="btn-secondary-custom w-100" type="submit">Importar empresa</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+        {% endif %}
 
         <section class="admin-card admin-card--danger admin-card--wide danger-row">
             <div class="danger-row__content">
