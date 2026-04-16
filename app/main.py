@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 from typing import List
 import pandas as pd
 import zipfile
@@ -12,6 +13,7 @@ import os
 import re
 import json
 import math
+import uuid
 from urllib.parse import quote
 from pathlib import Path
 from io import BytesIO
@@ -25,6 +27,11 @@ from app import models
 
 app = FastAPI()
 APP_BUILD = "2026-04-15-cachefix-v3"
+STORAGE_DIR = Path(os.getenv("STORAGE_DIR", "app/storage")).resolve()
+MEDIA_BASE_DIR = STORAGE_DIR / "empresas"
+MEDIA_URL_PREFIX = "/media"
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+MEDIA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SESSION_SECRET", "cambia-esto-en-render"),
@@ -38,6 +45,7 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    ensure_empresa_media_columns()
     print("CODEX_SIGNATURE_2026_04_15")
     route_paths = sorted(
         {
@@ -60,7 +68,18 @@ def on_startup():
 # Static & Templates
 # ---------------------------------------------------
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount(MEDIA_URL_PREFIX, StaticFiles(directory=str(STORAGE_DIR)), name="media")
 templates = Jinja2Templates(directory="app/templates")
+
+
+def ensure_empresa_media_columns():
+    inspector = inspect(engine)
+    columns = {col["name"] for col in inspector.get_columns("empresas")}
+    with engine.begin() as conn:
+        if "logo_url" not in columns:
+            conn.execute(text("ALTER TABLE empresas ADD COLUMN logo_url VARCHAR"))
+        if "banner_url" not in columns:
+            conn.execute(text("ALTER TABLE empresas ADD COLUMN banner_url VARCHAR"))
 
 # ---------------------------------------------------
 # DB Dependency
@@ -132,6 +151,62 @@ def clean_stock(value, default=0):
         return int(float(value))
     except Exception:
         return default
+
+
+def get_empresa_media_dir(slug: str, media_type: str) -> Path:
+    safe_slug = re.sub(r"[^a-z0-9\-]", "-", (slug or "").strip().lower())
+    safe_slug = re.sub(r"-+", "-", safe_slug).strip("-")
+    return MEDIA_BASE_DIR / safe_slug / media_type
+
+
+def build_media_url(slug: str, media_type: str, filename: str) -> str:
+    return f"{MEDIA_URL_PREFIX}/empresas/{slug}/{media_type}/{filename}"
+
+
+def safe_unique_filename(upload: UploadFile, prefix: str) -> str:
+    ext = Path(upload.filename or "").suffix.lower()
+    ext = re.sub(r"[^a-z0-9.]", "", ext)
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        ext = ".jpg"
+    return f"{prefix}-{uuid.uuid4().hex}{ext}"
+
+
+async def replace_empresa_media(empresa: models.Empresa, media_type: str, upload: UploadFile) -> str:
+    target_dir = get_empresa_media_dir(empresa.slug, media_type)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for old_file in target_dir.iterdir():
+        if old_file.is_file():
+            old_file.unlink()
+
+    filename = safe_unique_filename(upload, prefix=media_type)
+    file_path = target_dir / filename
+    with open(file_path, "wb") as f:
+        f.write(await upload.read())
+
+    return build_media_url(empresa.slug, media_type, filename)
+
+
+def get_empresa_logo_url(empresa: models.Empresa | None) -> str:
+    if not empresa:
+        return "/static/images/logo.png"
+    if empresa.logo_url:
+        return empresa.logo_url
+    legacy = Path(f"app/static/empresas/{empresa.slug}/logo.png")
+    if legacy.exists():
+        return f"/static/empresas/{empresa.slug}/logo.png"
+    return "/static/images/logo.png"
+
+
+def get_empresa_banner_url(empresa: models.Empresa | None) -> str:
+    if not empresa:
+        return "/static/images/banner.jpg"
+    if empresa.banner_url:
+        return empresa.banner_url
+    legacy = Path(f"app/static/empresas/{empresa.slug}/banner.jpg")
+    if legacy.exists():
+        return f"/static/empresas/{empresa.slug}/banner.jpg"
+    return "/static/images/banner.jpg"
 
 
 @app.get("/admin/login", response_class=HTMLResponse)
@@ -253,16 +328,14 @@ async def actualizar_imagenes_empresa(
     if not empresa:
         return panel_redirect(error="Empresa inválida")
 
-    base_path = Path("app/static/empresas") / empresa.slug
-    base_path.mkdir(parents=True, exist_ok=True)
-
     if logo:
-        with open(base_path / "logo.png", "wb") as f:
-            f.write(await logo.read())
+        empresa.logo_url = await replace_empresa_media(empresa, media_type="logo", upload=logo)
 
     if banner:
-        with open(base_path / "banner.jpg", "wb") as f:
-            f.write(await banner.read())
+        empresa.banner_url = await replace_empresa_media(empresa, media_type="banner", upload=banner)
+
+    db.add(empresa)
+    db.commit()
 
     return panel_redirect(empresa_slug=empresa.slug, msg="Imágenes actualizadas")
 
@@ -288,6 +361,7 @@ def activar_empresa_panel(
 def admin_productos(
     request: Request,
     empresa: str | None = Query(default=None),
+    q: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
     auth = require_admin(request)
@@ -298,12 +372,15 @@ def admin_productos(
     if not empresa:
         return HTMLResponse("<h1>No hay empresa activa</h1>", status_code=400)
 
-    productos = (
-        db.query(models.Producto)
-        .filter(models.Producto.empresa_id == empresa.id)
-        .order_by(models.Producto.codigo)
-        .all()
-    )
+    query_db = db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id)
+    if q:
+        q_like = f"%{q.strip()}%"
+        query_db = query_db.filter(
+            (models.Producto.codigo.ilike(q_like)) |
+            (models.Producto.descripcion.ilike(q_like))
+        )
+
+    productos = query_db.order_by(models.Producto.codigo).all()
 
     return templates.TemplateResponse(
         "admin_productos.html",
@@ -311,14 +388,54 @@ def admin_productos(
             "request": request,
             "empresa": empresa,
             "productos": productos,
+            "query": q,
         },
     )
+
+
+@app.get("/admin/productos/{producto_id}/editar", response_class=HTMLResponse)
+def editar_producto_view(
+    request: Request,
+    producto_id: int,
+    empresa: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    producto = (
+        db.query(models.Producto)
+        .filter(models.Producto.id == producto_id)
+        .first()
+    )
+    if not producto:
+        return RedirectResponse(url="/admin/productos", status_code=303)
+
+    empresa_ctx = get_empresa_by_slug(db, empresa) if empresa else producto.empresa
+    if not empresa_ctx:
+        empresa_ctx = producto.empresa
+
+    return templates.TemplateResponse(
+        "admin_producto_editar.html",
+        {
+            "request": request,
+            "producto": producto,
+            "empresa": empresa_ctx,
+        },
+    )
+
 
 @app.post("/admin/productos/{producto_id}/actualizar")
 async def actualizar_producto(
     request: Request,
     producto_id: int,
+    empresa_slug: str = Form(""),
+    codigo: str = Form(...),
     descripcion: str = Form(...),
+    categoria: str = Form(""),
+    marca: str = Form(""),
+    stock: int = Form(0),
     precio: float = Form(...),
     activo: bool = Form(False),
     imagen: UploadFile = File(None),
@@ -332,7 +449,11 @@ async def actualizar_producto(
     if not producto:
         return RedirectResponse(url="/admin/productos", status_code=303)
 
+    producto.codigo = clean_text(codigo, default=producto.codigo) or producto.codigo
     producto.descripcion = descripcion
+    producto.categoria = clean_text(categoria, default="") or None
+    producto.marca = clean_text(marca, default="") or None
+    producto.stock = stock
     producto.precio = precio
     producto.activo = activo
 
@@ -356,7 +477,9 @@ async def actualizar_producto(
             f.write(await imagen.read())
 
     db.commit()
-    return RedirectResponse(url="/admin/productos", status_code=303)
+    target_empresa = empresa_slug or (producto.empresa.slug if producto.empresa else "")
+    redirect_target = f"/admin/productos?empresa={quote(target_empresa)}" if target_empresa else "/admin/productos"
+    return RedirectResponse(url=redirect_target, status_code=303)
 
 @app.get("/admin/borrar_empresa/{empresa_id}")
 def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(get_db)):
@@ -378,6 +501,9 @@ def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(
     path = Path(f"app/static/empresas/{slug}")
     if path.exists():
         shutil.rmtree(path)
+    media_path = MEDIA_BASE_DIR / slug
+    if media_path.exists():
+        shutil.rmtree(media_path)
 
     return HTMLResponse(
         f"<h1>Empresa {slug} eliminada correctamente</h1>"
@@ -417,6 +543,8 @@ def upload_view(
             "empresas": empresas,
             "empresa_activa": empresa_activa,
             "empresa_query": empresa_activa.slug if empresa_activa else "",
+            "empresa_logo_url": get_empresa_logo_url(empresa_activa),
+            "empresa_banner_url": get_empresa_banner_url(empresa_activa),
             "time": int(time.time()),
             "using_default_admin_password": using_default_admin_password,
             "app_build": APP_BUILD,
@@ -471,12 +599,13 @@ async def crear_empresa_panel(
     productos_path.mkdir(exist_ok=True)
 
     if logo:
-        with open(base_path / "logo.png", "wb") as f:
-            f.write(await logo.read())
+        empresa.logo_url = await replace_empresa_media(empresa, media_type="logo", upload=logo)
 
     if banner:
-        with open(base_path / "banner.jpg", "wb") as f:
-            f.write(await banner.read())
+        empresa.banner_url = await replace_empresa_media(empresa, media_type="banner", upload=banner)
+
+    db.add(empresa)
+    db.commit()
 
     return panel_redirect(empresa_slug=empresa.slug, msg="Empresa creada correctamente")
 
@@ -519,8 +648,9 @@ def upload_excel(
         if not empresa:
             return panel_redirect(error="Empresa inválida. Seleccioná una empresa primero.")
 
-        IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
-        os.makedirs(IMAGES_PATH, exist_ok=True)
+        filename = (file.filename or "").lower()
+        if not filename.endswith((".xlsx", ".xls")):
+            return panel_redirect(empresa_slug=empresa.slug, error="Formato inválido. Subí un archivo Excel (.xlsx o .xls).")
 
         df = pd.read_excel(file.file)
         df.columns = [c.strip().lower() for c in df.columns]
@@ -573,7 +703,7 @@ def upload_excel(
 
         return panel_redirect(
             empresa_slug=empresa.slug,
-            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}"
+            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}. Revisalos en /admin/productos."
         )
 
     except Exception as e:
@@ -780,6 +910,8 @@ def catalogo(
             "query": q,
             "ts_download": int(time.time()),
             "app_build": APP_BUILD,
+            "empresa_logo_url": get_empresa_logo_url(empresa),
+            "empresa_banner_url": get_empresa_banner_url(empresa),
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -948,6 +1080,9 @@ def borrar_empresa(request: Request, empresa_id: int, db: Session = Depends(get_
     empresa_path = Path(f"app/static/empresas/{empresa.slug}")
     if empresa_path.exists():
         shutil.rmtree(empresa_path)
+    empresa_media_path = MEDIA_BASE_DIR / empresa.slug
+    if empresa_media_path.exists():
+        shutil.rmtree(empresa_media_path)
 
     # borrar DB (productos se borran por cascade)
     db.delete(empresa)

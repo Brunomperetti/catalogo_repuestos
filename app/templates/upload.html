@@ -38,7 +38,7 @@
 
             <div class="hero-card__right">
                 <img
-                    src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+                    src="{{ empresa_logo_url }}?ts={{ time }}"
                     alt="Logo empresa activa"
                     class="hero-logo"
                     onerror="this.style.display='none'; document.getElementById('heroLogoFallback').style.display='flex';"
@@ -97,7 +97,7 @@
 
                     <div class="image-preview image-preview--logo">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/logo.png?ts={{ time }}"
+                            src="{{ empresa_logo_url }}?ts={{ time }}"
                             alt="Preview logo"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -111,7 +111,7 @@
 
                     <div class="image-preview image-preview--banner">
                         <img
-                            src="/static/empresas/{{ empresa_activa.slug }}/banner.jpg?ts={{ time }}"
+                            src="{{ empresa_banner_url }}?ts={{ time }}"
                             alt="Preview banner"
                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         >
@@ -200,6 +200,12 @@
                             <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
                             <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
                         </form>
+
+                        {% if empresa_activa %}
+                        <a href="/admin/productos?empresa={{ empresa_activa.slug }}" class="btn-outline-custom w-100 mt-3 d-inline-block text-center">
+                            Ver / editar productos importados
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
 
