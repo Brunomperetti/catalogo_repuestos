@@ -221,6 +221,19 @@ def media_url_to_file_path(url: str | None) -> Path | None:
     return None
 
 
+def resolve_empresa_media_file(empresa: models.Empresa, media_type: str) -> Path | None:
+    if media_type == "logo":
+        candidates = [empresa.logo_url, get_empresa_logo_url(empresa)]
+    else:
+        candidates = [empresa.banner_url, get_empresa_banner_url(empresa)]
+
+    for url in candidates:
+        media_path = media_url_to_file_path(url)
+        if media_path and media_path.exists() and media_path.is_file():
+            return media_path
+    return None
+
+
 def build_unique_slug(db: Session, base_slug: str) -> str:
     base_slug = re.sub(r"[^a-z0-9\-]", "-", (base_slug or "").strip().lower())
     base_slug = re.sub(r"-+", "-", base_slug).strip("-") or "empresa"
@@ -614,7 +627,6 @@ def upload_view(
             "time": int(time.time()),
             "using_default_admin_password": using_default_admin_password,
             "app_build": APP_BUILD,
-            "import_mode": "duplicate",
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -813,9 +825,8 @@ def exportar_empresa_admin(
     output = BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for media_type, field in [("logo", "logo"), ("banner", "banner")]:
-            url = empresa.logo_url if media_type == "logo" else empresa.banner_url
-            media_path = media_url_to_file_path(url)
-            if media_path and media_path.exists() and media_path.is_file():
+            media_path = resolve_empresa_media_file(empresa, media_type)
+            if media_path:
                 asset_name = f"assets/{field}{media_path.suffix.lower()}"
                 zf.write(media_path, arcname=asset_name)
                 payload["assets"][field] = asset_name
@@ -846,6 +857,8 @@ async def importar_empresa_admin(
     filename = (file.filename or "").lower()
     if not filename.endswith(".zip"):
         return panel_redirect(empresa_slug=empresa_slug, error="Formato inválido. Subí un backup .zip generado por el sistema.")
+    if import_mode not in {"duplicate", "replace"}:
+        return panel_redirect(empresa_slug=empresa_slug, error="Modo de importación inválido.")
 
     try:
         with TemporaryDirectory() as temp_dir:
