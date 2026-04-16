@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin productos | {{ empresa.nombre }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h1 class="h3 mb-1">Productos de {{ empresa.nombre }}</h1>
+            <small class="text-secondary">Empresa: {{ empresa.slug }}</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/?empresa={{ empresa.slug }}" class="btn btn-outline-light">Volver al panel</a>
+            <a href="/catalogo/{{ empresa.slug }}" target="_blank" class="btn btn-success">Ver catálogo público</a>
+        </div>
+    </div>
+
+    <form method="get" action="/admin/productos" class="row g-2 mb-3">
+        <input type="hidden" name="empresa" value="{{ empresa.slug }}">
+        <div class="col-md-8">
+            <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por código o descripción">
+        </div>
+        <div class="col-md-4 d-grid">
+            <button type="submit" class="btn btn-primary">Buscar</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-dark table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th>Categoría</th>
+                    <th>Marca</th>
+                    <th>Stock</th>
+                    <th>Precio</th>
+                    <th>Activo</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in productos %}
+                <tr>
+                    <td>{{ p.codigo }}</td>
+                    <td>{{ p.descripcion }}</td>
+                    <td>{{ p.categoria or '-' }}</td>
+                    <td>{{ p.marca or '-' }}</td>
+                    <td>{{ p.stock or 0 }}</td>
+                    <td>${{ '%.2f'|format(p.precio) }}</td>
+                    <td>{% if p.activo %}Sí{% else %}No{% endif %}</td>
+                    <td>
+                        <a href="/admin/productos/{{ p.id }}/editar?empresa={{ empresa.slug }}" class="btn btn-sm btn-warning">Editar</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center text-secondary py-4">No hay productos para mostrar.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

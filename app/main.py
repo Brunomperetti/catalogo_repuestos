@@ -288,6 +288,7 @@ def activar_empresa_panel(
 def admin_productos(
     request: Request,
     empresa: str | None = Query(default=None),
+    q: str = Query(default=""),
     db: Session = Depends(get_db)
 ):
     auth = require_admin(request)
@@ -298,12 +299,15 @@ def admin_productos(
     if not empresa:
         return HTMLResponse("<h1>No hay empresa activa</h1>", status_code=400)
 
-    productos = (
-        db.query(models.Producto)
-        .filter(models.Producto.empresa_id == empresa.id)
-        .order_by(models.Producto.codigo)
-        .all()
-    )
+    query_db = db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id)
+    if q:
+        q_like = f"%{q.strip()}%"
+        query_db = query_db.filter(
+            (models.Producto.codigo.ilike(q_like)) |
+            (models.Producto.descripcion.ilike(q_like))
+        )
+
+    productos = query_db.order_by(models.Producto.codigo).all()
 
     return templates.TemplateResponse(
         "admin_productos.html",
@@ -311,14 +315,54 @@ def admin_productos(
             "request": request,
             "empresa": empresa,
             "productos": productos,
+            "query": q,
         },
     )
+
+
+@app.get("/admin/productos/{producto_id}/editar", response_class=HTMLResponse)
+def editar_producto_view(
+    request: Request,
+    producto_id: int,
+    empresa: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    producto = (
+        db.query(models.Producto)
+        .filter(models.Producto.id == producto_id)
+        .first()
+    )
+    if not producto:
+        return RedirectResponse(url="/admin/productos", status_code=303)
+
+    empresa_ctx = get_empresa_by_slug(db, empresa) if empresa else producto.empresa
+    if not empresa_ctx:
+        empresa_ctx = producto.empresa
+
+    return templates.TemplateResponse(
+        "admin_producto_editar.html",
+        {
+            "request": request,
+            "producto": producto,
+            "empresa": empresa_ctx,
+        },
+    )
+
 
 @app.post("/admin/productos/{producto_id}/actualizar")
 async def actualizar_producto(
     request: Request,
     producto_id: int,
+    empresa_slug: str = Form(""),
+    codigo: str = Form(...),
     descripcion: str = Form(...),
+    categoria: str = Form(""),
+    marca: str = Form(""),
+    stock: int = Form(0),
     precio: float = Form(...),
     activo: bool = Form(False),
     imagen: UploadFile = File(None),
@@ -332,7 +376,11 @@ async def actualizar_producto(
     if not producto:
         return RedirectResponse(url="/admin/productos", status_code=303)
 
+    producto.codigo = clean_text(codigo, default=producto.codigo) or producto.codigo
     producto.descripcion = descripcion
+    producto.categoria = clean_text(categoria, default="") or None
+    producto.marca = clean_text(marca, default="") or None
+    producto.stock = stock
     producto.precio = precio
     producto.activo = activo
 
@@ -356,7 +404,9 @@ async def actualizar_producto(
             f.write(await imagen.read())
 
     db.commit()
-    return RedirectResponse(url="/admin/productos", status_code=303)
+    target_empresa = empresa_slug or (producto.empresa.slug if producto.empresa else "")
+    redirect_target = f"/admin/productos?empresa={quote(target_empresa)}" if target_empresa else "/admin/productos"
+    return RedirectResponse(url=redirect_target, status_code=303)
 
 @app.get("/admin/borrar_empresa/{empresa_id}")
 def borrar_empresa_get(request: Request, empresa_id: int, db: Session = Depends(get_db)):
@@ -519,8 +569,9 @@ def upload_excel(
         if not empresa:
             return panel_redirect(error="Empresa inválida. Seleccioná una empresa primero.")
 
-        IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
-        os.makedirs(IMAGES_PATH, exist_ok=True)
+        filename = (file.filename or "").lower()
+        if not filename.endswith((".xlsx", ".xls")):
+            return panel_redirect(empresa_slug=empresa.slug, error="Formato inválido. Subí un archivo Excel (.xlsx o .xls).")
 
         df = pd.read_excel(file.file)
         df.columns = [c.strip().lower() for c in df.columns]
@@ -573,7 +624,7 @@ def upload_excel(
 
         return panel_redirect(
             empresa_slug=empresa.slug,
-            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}"
+            msg=f"Productos cargados. Nuevos: {nuevos}, Actualizados: {actualizados}. Revisalos en /admin/productos."
         )
 
     except Exception as e:

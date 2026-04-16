@@ -200,6 +200,12 @@
                             <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
                             <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
                         </form>
+
+                        {% if empresa_activa %}
+                        <a href="/admin/productos?empresa={{ empresa_activa.slug }}" class="btn-outline-custom w-100 mt-3 d-inline-block text-center">
+                            Ver / editar productos importados
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
 
