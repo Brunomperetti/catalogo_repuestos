@@ -231,6 +231,53 @@
             {% endif %}
         </section>
 
+        <section class="admin-card admin-card--wide">
+            <div class="card-header-custom">
+                <h2 class="card-title-custom">🧳 Backup / Restore empresa completa</h2>
+                <p class="card-subtitle-custom">
+                    Exportá e importá una empresa completa (datos, productos y assets) en un único ZIP.
+                </p>
+            </div>
+
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Exportar empresa activa</h3>
+                        <p>Genera un ZIP con metadatos de empresa, productos e imágenes.</p>
+                        {% if empresa_activa %}
+                        <a class="btn-primary-custom w-100 d-inline-block text-center"
+                           href="/admin/empresa/exportar?empresa={{ empresa_activa.slug }}">
+                            Descargar ZIP completo
+                        </a>
+                        {% else %}
+                        <p class="text-warning">No hay empresa activa para exportar.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Importar ZIP completo</h3>
+                        <p>
+                            Modo <b>duplicate</b> (por defecto): crea nueva empresa si el slug existe.
+                            Modo <b>replace</b>: pisa la empresa existente.
+                        </p>
+                        <form action="/admin/empresa/importar" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                            <select class="input-custom select-custom" name="import_mode">
+                                <option value="duplicate" selected>duplicate (seguro)</option>
+                                <option value="replace">replace (sobrescribir)</option>
+                            </select>
+                            <button class="btn-secondary-custom w-100" type="submit">Importar ZIP completo</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="admin-card admin-card--danger admin-card--wide danger-row">
             <div class="danger-row__content">
                 <div>
