@@ -405,14 +405,16 @@
                 <div class="header-whatsapp">
                     WhatsApp: <span>{{ empresa.whatsapp }}</span>
                 </div>
+                <div style="font-size:12px;opacity:.75;">Build: {{ app_build }}</div>
             </div>
         </div>
 
         <!-- CTA DESCARGA -->
-        <a href="/static/empresas/{{ empresa.slug }}/lista_precios.pdf"
+        <a id="download-xlsx-btn"
+           href="/catalogo/{{ empresa.slug }}/lista_precios.xlsx?ts={{ ts_download }}"
            class="cta-download"
-           download>
-            Descargar lista de precios COMPLETA
+           download="lista_precios.xlsx">
+            Descargar lista de precios COMPLETA (Excel)
         </a>
 
 
@@ -517,7 +519,7 @@
 
             <div class="card catalog-card" onclick="abrirModal({{ p.id }})">
 
-                <<img src="{{ p.imagen_url }}"
+                <img src="{{ p.imagen_url }}"
                      class="card-img-top"
                      loading="lazy"
                      onerror="this.onerror=null;this.src='/static/img/no-image.jpg';">
@@ -1005,6 +1007,28 @@ function applyFiltersAndSort() {
 
 /* ---------- INIT UX ---------- */
 document.addEventListener('DOMContentLoaded', () => {
+    const downloadBtn = document.getElementById('download-xlsx-btn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const url = downloadBtn.getAttribute('href');
+            try {
+                const resp = await fetch(url, { cache: 'no-store' });
+                if (!resp.ok) throw new Error('No se pudo generar el Excel');
+                const blob = await resp.blob();
+                const a = document.createElement('a');
+                const blobUrl = URL.createObjectURL(blob);
+                a.href = blobUrl;
+                a.download = 'lista_precios.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(blobUrl);
+            } catch (err) {
+                window.location.href = url;
+            }
+        });
+    }
 
     // Categorías
     document.querySelectorAll('.category-pill').forEach(btn => {
