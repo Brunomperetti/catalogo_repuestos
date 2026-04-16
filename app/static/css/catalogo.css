@@ -228,6 +228,24 @@ img[src*="no-image"] {
     background: linear-gradient(180deg, rgba(22, 10, 16, 0.94), rgba(12, 8, 15, 0.92));
 }
 
+.section-header-card {
+    padding: 18px 24px;
+    background: rgba(15, 23, 42, 0.85);
+}
+
+.section-header-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #dbeafe;
+}
+
+.section-header-subtitle {
+    margin: 6px 0 0 0;
+    color: #94a3b8;
+    font-size: .92rem;
+}
+
 .card-header-custom {
     margin-bottom: 18px;
 }

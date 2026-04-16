@@ -14,12 +14,12 @@
             <small class="text-secondary">Empresa: {{ empresa.slug }}</small>
         </div>
         <div class="d-flex gap-2">
-            <a href="/?empresa={{ empresa.slug }}" class="btn btn-outline-light">Volver al panel</a>
+            <a href="{% if is_admin %}/admin?empresa={{ empresa.slug }}{% else %}/cliente{% endif %}" class="btn btn-outline-light">Volver al panel</a>
             <a href="/catalogo/{{ empresa.slug }}" target="_blank" class="btn btn-success">Ver catálogo público</a>
         </div>
     </div>
 
-    <form method="get" action="/admin/productos" class="row g-2 mb-3">
+    <form method="get" action="{% if is_admin %}/admin/productos{% else %}/cliente/productos{% endif %}" class="row g-2 mb-3">
         <input type="hidden" name="empresa" value="{{ empresa.slug }}">
         <div class="col-md-8">
             <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por código o descripción">
@@ -54,7 +54,7 @@
                     <td>${{ '%.2f'|format(p.precio) }}</td>
                     <td>{% if p.activo %}Sí{% else %}No{% endif %}</td>
                     <td>
-                        <a href="/admin/productos/{{ p.id }}/editar?empresa={{ empresa.slug }}" class="btn btn-sm btn-warning">Editar</a>
+                        <a href="{% if is_admin %}/admin/productos/{{ p.id }}/editar{% else %}/cliente/productos/{{ p.id }}/editar{% endif %}?empresa={{ empresa.slug }}" class="btn btn-sm btn-warning">Editar</a>
                     </td>
                 </tr>
                 {% else %}
