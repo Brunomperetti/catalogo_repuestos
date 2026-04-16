@@ -384,7 +384,7 @@
 
     <!-- BANNER -->
     <div class="banner-wrap mb-4">
-        <img src="/static/empresas/{{ empresa.slug }}/banner.jpg"
+        <img src="{{ empresa_banner_url }}"
          alt="Banner {{ empresa.nombre }}"
          onerror="this.style.display='none'">
     </div>
@@ -395,7 +395,7 @@
     <div class="header-box d-flex align-items-center justify-content-between flex-wrap gap-3">
 
         <div class="d-flex align-items-center gap-3 flex-wrap">
-            <img src="/static/empresas/{{ empresa.slug }}/logo.png"
+            <img src="{{ empresa_logo_url }}"
                  class="header-logo"
                  onerror="this.style.display='none'">
 
@@ -1096,7 +1096,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
-
 
 
 
