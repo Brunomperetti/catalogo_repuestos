@@ -17,6 +17,7 @@ import uuid
 from urllib.parse import quote
 from pathlib import Path
 from io import BytesIO
+from datetime import datetime, timezone
 
 # PDF
 from reportlab.pdfgen import canvas
@@ -161,6 +162,52 @@ def get_empresa_media_dir(slug: str, media_type: str) -> Path:
 
 def build_media_url(slug: str, media_type: str, filename: str) -> str:
     return f"{MEDIA_URL_PREFIX}/empresas/{slug}/{media_type}/{filename}"
+
+
+def build_unique_slug(db: Session, base_slug: str) -> str:
+    base_slug = (base_slug or "").strip().lower()
+    base_slug = re.sub(r"[^a-z0-9\-]", "-", base_slug)
+    base_slug = re.sub(r"-+", "-", base_slug).strip("-")
+    if not base_slug:
+        base_slug = "empresa"
+
+    exists = db.query(models.Empresa).filter(models.Empresa.slug == base_slug).first()
+    if not exists:
+        return base_slug
+
+    i = 2
+    while True:
+        candidate = f"{base_slug}-copia-{i}"
+        exists = db.query(models.Empresa).filter(models.Empresa.slug == candidate).first()
+        if not exists:
+            return candidate
+        i += 1
+
+
+def _zip_safe_members(zip_ref: zipfile.ZipFile):
+    for member in zip_ref.infolist():
+        member_name = member.filename.replace("\\", "/")
+        if member_name.endswith("/"):
+            continue
+        parts = [p for p in Path(member_name).parts if p not in ("", ".", "..")]
+        if not parts:
+            continue
+        yield member, Path(*parts)
+
+
+def _copy_zip_prefix(zip_ref: zipfile.ZipFile, prefix: str, target_dir: Path):
+    normalized_prefix = prefix.rstrip("/") + "/"
+    for member, safe_path in _zip_safe_members(zip_ref):
+        safe_str = safe_path.as_posix()
+        if not safe_str.startswith(normalized_prefix):
+            continue
+        relative_str = safe_str[len(normalized_prefix):]
+        if not relative_str:
+            continue
+        destination = target_dir / Path(relative_str)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with zip_ref.open(member, "r") as src, open(destination, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
 
 def safe_unique_filename(upload: UploadFile, prefix: str) -> str:
@@ -356,6 +403,82 @@ def activar_empresa_panel(
         return panel_redirect(error="Empresa no encontrada")
 
     return panel_redirect(empresa_slug=empresa.slug)
+
+
+@app.post("/empresa/editar_panel")
+def editar_empresa_panel(
+    request: Request,
+    empresa_slug_actual: str = Form(...),
+    nombre: str = Form(...),
+    whatsapp: str = Form(""),
+    editar_slug: str = Form("0"),
+    nuevo_slug: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa_slug_actual)
+    if not empresa:
+        return panel_redirect(error="Empresa no encontrada.")
+
+    nombre_limpio = clean_text(nombre, default="")
+    whatsapp_limpio = clean_text(whatsapp, default="") or None
+    if not nombre_limpio:
+        return panel_redirect(empresa_slug=empresa.slug, error="El nombre de la empresa no puede estar vacío.")
+
+    slug_original = empresa.slug
+    slug_final = slug_original
+
+    if editar_slug == "1":
+        nuevo_slug_limpio = clean_text(nuevo_slug, default="").lower()
+        nuevo_slug_limpio = re.sub(r"[^a-z0-9\-]", "-", nuevo_slug_limpio)
+        nuevo_slug_limpio = re.sub(r"-+", "-", nuevo_slug_limpio).strip("-")
+
+        if not nuevo_slug_limpio:
+            return panel_redirect(empresa_slug=slug_original, error="Slug inválido.")
+
+        if nuevo_slug_limpio != slug_original:
+            existe = db.query(models.Empresa).filter(models.Empresa.slug == nuevo_slug_limpio).first()
+            if existe:
+                return panel_redirect(empresa_slug=slug_original, error="Ese slug ya existe.")
+            slug_final = nuevo_slug_limpio
+
+    empresa.nombre = nombre_limpio
+    empresa.whatsapp = whatsapp_limpio
+
+    if slug_final != slug_original:
+        old_static_dir = Path("app/static/empresas") / slug_original
+        new_static_dir = Path("app/static/empresas") / slug_final
+        if old_static_dir.exists():
+            if new_static_dir.exists():
+                shutil.rmtree(new_static_dir)
+            old_static_dir.rename(new_static_dir)
+
+        old_storage_dir = MEDIA_BASE_DIR / slug_original
+        new_storage_dir = MEDIA_BASE_DIR / slug_final
+        if old_storage_dir.exists():
+            if new_storage_dir.exists():
+                shutil.rmtree(new_storage_dir)
+            old_storage_dir.rename(new_storage_dir)
+
+        if empresa.logo_url:
+            empresa.logo_url = empresa.logo_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+        if empresa.banner_url:
+            empresa.banner_url = empresa.banner_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+
+        productos = db.query(models.Producto).filter(models.Producto.empresa_id == empresa.id).all()
+        for p in productos:
+            if p.imagen_url:
+                p.imagen_url = p.imagen_url.replace(f"/empresas/{slug_original}/", f"/empresas/{slug_final}/")
+
+        empresa.slug = slug_final
+
+    db.add(empresa)
+    db.commit()
+
+    return panel_redirect(empresa_slug=empresa.slug, msg="Empresa actualizada correctamente.")
 
 @app.get("/admin/productos", response_class=HTMLResponse)
 def admin_productos(
@@ -748,6 +871,177 @@ def upload_zip(
     except Exception as e:
         print("Error ZIP:", e)
         return panel_redirect(empresa_slug=empresa_slug, error="Error al procesar el ZIP.")
+
+
+@app.get("/admin/empresa/exportar")
+def exportar_empresa_completa(
+    request: Request,
+    empresa: str | None = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    empresa_obj = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
+    if not empresa_obj:
+        return JSONResponse({"error": "No hay empresa activa para exportar"}, status_code=400)
+
+    productos = db.query(models.Producto).filter(models.Producto.empresa_id == empresa_obj.id).all()
+    payload = {
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "empresa": {
+            "nombre": empresa_obj.nombre,
+            "slug": empresa_obj.slug,
+            "whatsapp": empresa_obj.whatsapp,
+            "logo_url": empresa_obj.logo_url,
+            "banner_url": empresa_obj.banner_url,
+        },
+        "productos": [
+            {
+                "codigo": p.codigo,
+                "descripcion": p.descripcion,
+                "categoria": p.categoria,
+                "marca": p.marca,
+                "precio": float(p.precio or 0),
+                "stock": int(p.stock or 0),
+                "activo": bool(p.activo),
+                "imagen_url": p.imagen_url,
+            }
+            for p in productos
+        ],
+    }
+
+    memory_file = BytesIO()
+    static_empresa_dir = Path("app/static/empresas") / empresa_obj.slug
+    storage_empresa_dir = MEDIA_BASE_DIR / empresa_obj.slug
+
+    with zipfile.ZipFile(memory_file, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("empresa.json", json.dumps(payload, ensure_ascii=False, indent=2))
+
+        if static_empresa_dir.exists():
+            for file_path in static_empresa_dir.rglob("*"):
+                if file_path.is_file():
+                    arcname = Path("static_empresas") / file_path.relative_to(static_empresa_dir)
+                    zipf.write(file_path, arcname.as_posix())
+
+        if storage_empresa_dir.exists():
+            for file_path in storage_empresa_dir.rglob("*"):
+                if file_path.is_file():
+                    arcname = Path("storage_empresas") / file_path.relative_to(storage_empresa_dir)
+                    zipf.write(file_path, arcname.as_posix())
+
+    memory_file.seek(0)
+    filename = f"empresa_{empresa_obj.slug}_backup.zip"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(memory_file, media_type="application/zip", headers=headers)
+
+
+@app.post("/admin/empresa/importar")
+def importar_empresa_completa(
+    request: Request,
+    empresa_slug: str = Form(""),
+    import_mode: str = Form("duplicate"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    auth = require_admin(request)
+    if auth:
+        return auth
+
+    mode = (import_mode or "duplicate").strip().lower()
+    if mode not in {"duplicate", "replace"}:
+        mode = "duplicate"
+
+    try:
+        zip_bytes = file.file.read()
+        with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zip_ref:
+            if "empresa.json" not in zip_ref.namelist():
+                return panel_redirect(empresa_slug=empresa_slug, error="ZIP inválido: falta empresa.json.")
+
+            payload = json.loads(zip_ref.read("empresa.json").decode("utf-8"))
+            empresa_data = payload.get("empresa", {}) or {}
+            productos_data = payload.get("productos", []) or []
+
+            source_slug = clean_text(empresa_data.get("slug", ""), default="")
+            source_slug = re.sub(r"[^a-z0-9\-]", "-", source_slug.lower())
+            source_slug = re.sub(r"-+", "-", source_slug).strip("-")
+            if not source_slug:
+                return panel_redirect(empresa_slug=empresa_slug, error="ZIP inválido: slug de empresa vacío.")
+
+            existing = get_empresa_by_slug(db, source_slug)
+
+            if mode == "replace":
+                target_slug = source_slug
+                if existing:
+                    target_empresa = existing
+                    db.query(models.Producto).filter(models.Producto.empresa_id == target_empresa.id).delete()
+                    static_target = Path("app/static/empresas") / target_slug
+                    if static_target.exists():
+                        shutil.rmtree(static_target)
+                    storage_target = MEDIA_BASE_DIR / target_slug
+                    if storage_target.exists():
+                        shutil.rmtree(storage_target)
+                else:
+                    target_empresa = models.Empresa(
+                        nombre=clean_text(empresa_data.get("nombre", source_slug), default=source_slug),
+                        slug=target_slug,
+                        whatsapp=clean_text(empresa_data.get("whatsapp", ""), default="") or None,
+                    )
+                    db.add(target_empresa)
+                    db.flush()
+            else:
+                target_slug = build_unique_slug(db, source_slug)
+                target_empresa = models.Empresa(
+                    nombre=clean_text(empresa_data.get("nombre", source_slug), default=source_slug),
+                    slug=target_slug,
+                    whatsapp=clean_text(empresa_data.get("whatsapp", ""), default="") or None,
+                )
+                db.add(target_empresa)
+                db.flush()
+
+            target_empresa.nombre = clean_text(empresa_data.get("nombre", target_empresa.nombre), default=target_empresa.nombre)
+            target_empresa.whatsapp = clean_text(empresa_data.get("whatsapp", target_empresa.whatsapp or ""), default="") or None
+            target_empresa.logo_url = build_media_url(target_slug, "logo", "logo.png")
+            target_empresa.banner_url = build_media_url(target_slug, "banner", "banner.jpg")
+
+            for p in productos_data:
+                codigo = clean_text(p.get("codigo", ""), default="")
+                if not codigo:
+                    continue
+                db.add(models.Producto(
+                    empresa_id=target_empresa.id,
+                    codigo=codigo,
+                    descripcion=clean_text(p.get("descripcion", codigo), default=codigo),
+                    categoria=clean_text(p.get("categoria", ""), default="") or None,
+                    marca=clean_text(p.get("marca", ""), default="") or None,
+                    precio=clean_price(p.get("precio", 0), default=0.0),
+                    stock=clean_stock(p.get("stock", 0), default=0),
+                    activo=bool(p.get("activo", True)),
+                    imagen_url=clean_text(p.get("imagen_url", ""), default="") or None,
+                ))
+
+            static_target_dir = Path("app/static/empresas") / target_slug
+            storage_target_dir = MEDIA_BASE_DIR / target_slug
+            _copy_zip_prefix(zip_ref, "static_empresas", static_target_dir)
+            _copy_zip_prefix(zip_ref, "storage_empresas", storage_target_dir)
+
+            db.add(target_empresa)
+            db.commit()
+
+            action = "reemplazada" if mode == "replace" else "importada"
+            return panel_redirect(
+                empresa_slug=target_slug,
+                msg=f"Empresa {action} correctamente con slug '{target_slug}'."
+            )
+
+    except zipfile.BadZipFile:
+        return panel_redirect(empresa_slug=empresa_slug, error="Archivo ZIP inválido.")
+    except Exception as e:
+        db.rollback()
+        print("Error importando empresa:", e)
+        return panel_redirect(empresa_slug=empresa_slug, error="Error al importar la empresa.")
 
 # ---------------------------------------------------
 # CATÁLOGO

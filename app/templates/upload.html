@@ -124,6 +124,45 @@
                 </button>
             </form>
         </section>
+
+        <section class="admin-card">
+            <div class="card-header-custom">
+                <h2 class="card-title-custom">✏️ Editar empresa activa</h2>
+                <p class="card-subtitle-custom">
+                    Corregí nombre y WhatsApp sin borrar la empresa.
+                </p>
+            </div>
+
+            <form action="/empresa/editar_panel" method="post" class="stack-form">
+                <input type="hidden" name="empresa_slug_actual" value="{{ empresa_activa.slug }}">
+
+                <div>
+                    <label class="field-label">Nombre de la empresa</label>
+                    <input class="input-custom" type="text" name="nombre" value="{{ empresa_activa.nombre }}" required>
+                </div>
+
+                <div>
+                    <label class="field-label">WhatsApp</label>
+                    <input class="input-custom" type="text" name="whatsapp" value="{{ empresa_activa.whatsapp or '' }}">
+                </div>
+
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="editar_slug" name="editar_slug" value="1" onchange="toggleSlugEdit()">
+                    <label class="form-check-label" for="editar_slug">
+                        Quiero editar el slug (opcional y avanzado)
+                    </label>
+                </div>
+
+                <div id="slug_edit_block" style="display:none;">
+                    <label class="field-label">Nuevo slug (URL)</label>
+                    <input class="input-custom" type="text" name="nuevo_slug" value="{{ empresa_activa.slug }}" placeholder="mi-empresa">
+                </div>
+
+                <button type="submit" class="btn-primary-custom w-100">
+                    Guardar datos de empresa
+                </button>
+            </form>
+        </section>
         {% endif %}
 
         <section class="admin-card">
@@ -231,6 +270,53 @@
             {% endif %}
         </section>
 
+        <section class="admin-card admin-card--wide">
+            <div class="card-header-custom">
+                <h2 class="card-title-custom">🧳 Backup / Restore empresa completa</h2>
+                <p class="card-subtitle-custom">
+                    Exportá e importá una empresa completa (datos, productos y assets) en un único ZIP.
+                </p>
+            </div>
+
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Exportar empresa activa</h3>
+                        <p>Genera un ZIP con metadatos de empresa, productos e imágenes.</p>
+                        {% if empresa_activa %}
+                        <a class="btn-primary-custom w-100 d-inline-block text-center"
+                           href="/admin/empresa/exportar?empresa={{ empresa_activa.slug }}">
+                            Descargar ZIP completo
+                        </a>
+                        {% else %}
+                        <p class="text-warning">No hay empresa activa para exportar.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Importar ZIP completo</h3>
+                        <p>
+                            Modo <b>duplicate</b> (por defecto): crea nueva empresa si el slug existe.
+                            Modo <b>replace</b>: pisa la empresa existente.
+                        </p>
+                        <form action="/admin/empresa/importar" method="post" enctype="multipart/form-data" class="stack-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                            <select class="input-custom select-custom" name="import_mode">
+                                <option value="duplicate" selected>duplicate (seguro)</option>
+                                <option value="replace">replace (sobrescribir)</option>
+                            </select>
+                            <button class="btn-secondary-custom w-100" type="submit">Importar ZIP completo</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="admin-card admin-card--danger admin-card--wide danger-row">
             <div class="danger-row__content">
                 <div>
@@ -268,6 +354,13 @@
 <script>
 function confirmarBorrado() {
     return confirm("¿Estás seguro de que querés borrar TODOS los productos?");
+}
+
+function toggleSlugEdit() {
+    const check = document.getElementById("editar_slug");
+    const block = document.getElementById("slug_edit_block");
+    if (!check || !block) return;
+    block.style.display = check.checked ? "block" : "none";
 }
 </script>
 
