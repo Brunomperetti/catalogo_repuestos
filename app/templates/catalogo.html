@@ -833,7 +833,6 @@ let modalComprador = new bootstrap.Modal(document.getElementById('modalComprador
 let nombreEmpresa = "{{ empresa.nombre if empresa else '' }}";
 let pedidoStorageKey = "buyer_data_{{ empresa.slug if empresa else 'catalogo' }}";
 let pendingCheckoutAction = null;
-let buyerModalConfirmedClose = false;
 
 let favorites = new Set(JSON.parse(localStorage.getItem('catalog_favorites') || '[]'));
 let showFavoritesOnly = false;
@@ -920,7 +919,6 @@ function updateBuyerDataStatus() {
 }
 
 function abrirModalComprador() {
-    buyerModalConfirmedClose = false;
     syncBuyerForm();
     modalComprador.show();
 }
@@ -945,12 +943,10 @@ function guardarDatosComprador(event) {
 
     buyerData = data;
     saveBuyerData();
-    buyerModalConfirmedClose = true;
+    const action = pendingCheckoutAction;
+    pendingCheckoutAction = null;
     modalComprador.hide();
-
-    if (pendingCheckoutAction) {
-        const action = pendingCheckoutAction;
-        pendingCheckoutAction = null;
+    if (action) {
         action();
     }
 }
@@ -1302,10 +1298,7 @@ function applyFiltersAndSort() {
 document.addEventListener('DOMContentLoaded', () => {
     const buyerModalEl = document.getElementById('modalComprador');
     buyerModalEl.addEventListener('hidden.bs.modal', () => {
-        if (!buyerModalConfirmedClose) {
-            pendingCheckoutAction = null;
-        }
-        buyerModalConfirmedClose = false;
+        pendingCheckoutAction = null;
     });
 
     const downloadBtn = document.getElementById('download-xlsx-btn');
