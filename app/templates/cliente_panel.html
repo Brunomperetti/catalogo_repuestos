@@ -17,11 +17,20 @@
                 <p class="hero-subtitle">Cargá tus productos, imágenes y mantené tu catálogo actualizado.</p>
                 <div class="hero-actions d-flex gap-2 flex-wrap">
                     <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-primary-custom">Ir al catálogo</a>
+                    <button
+                        type="button"
+                        id="copyCatalogLinkBtn"
+                        class="btn-secondary-custom"
+                        data-catalog-url="{{ catalogo_public_url }}"
+                    >
+                        Copiar link del catálogo
+                    </button>
                     <a href="/logout" class="btn-outline-custom">Cerrar sesión</a>
                     {% if is_admin_view %}
                     <a href="/admin?empresa={{ empresa_activa.slug }}" class="btn-secondary-custom">Ir al panel admin</a>
                     {% endif %}
                 </div>
+                <div id="copyCatalogLinkFeedback" class="copy-feedback" role="status" aria-live="polite"></div>
             </div>
             <div class="hero-card__right">
                 <img src="{{ empresa_logo_url }}?ts={{ time }}" alt="Logo empresa" class="hero-logo">
@@ -64,5 +73,54 @@
     {% if msg %}<div class="alert alert-custom-success mt-3">{{ msg }}</div>{% endif %}
     {% if error %}<div class="alert alert-custom-error mt-3">{{ error }}</div>{% endif %}
 </div>
+<script>
+(() => {
+    const copyButton = document.getElementById("copyCatalogLinkBtn");
+    const feedback = document.getElementById("copyCatalogLinkFeedback");
+    if (!copyButton || !feedback) return;
+
+    const catalogUrl = copyButton.dataset.catalogUrl || "";
+    if (!catalogUrl) {
+        copyButton.disabled = true;
+        feedback.textContent = "No se pudo generar el link del catálogo.";
+        feedback.classList.add("copy-feedback--error");
+        return;
+    }
+
+    const setFeedback = (message, isError = false) => {
+        feedback.textContent = message;
+        feedback.classList.toggle("copy-feedback--error", isError);
+        feedback.classList.toggle("copy-feedback--success", !isError);
+    };
+
+    const fallbackCopy = async (text) => {
+        const input = document.createElement("textarea");
+        input.value = text;
+        input.setAttribute("readonly", "");
+        input.style.position = "absolute";
+        input.style.left = "-9999px";
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(input);
+        if (!copied) {
+            throw new Error("copy_failed");
+        }
+    };
+
+    copyButton.addEventListener("click", async () => {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(catalogUrl);
+            } else {
+                await fallbackCopy(catalogUrl);
+            }
+            setFeedback("Link copiado");
+        } catch (_) {
+            setFeedback("No se pudo copiar el link. Probá de nuevo.", true);
+        }
+    });
+})();
+</script>
 </body>
 </html>
