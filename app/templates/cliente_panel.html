@@ -17,18 +17,31 @@
                 <p class="hero-subtitle">Cargá tus productos, imágenes y mantené tu catálogo actualizado.</p>
                 <div class="hero-actions d-flex gap-2 flex-wrap">
                     <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-primary-custom">Ir al catálogo</a>
-                    <button
-                        type="button"
-                        id="copyCatalogLinkBtn"
-                        class="btn-secondary-custom"
-                        data-catalog-url="{{ catalogo_public_url }}"
-                    >
-                        Copiar link del catálogo
-                    </button>
                     <a href="/logout" class="btn-outline-custom">Cerrar sesión</a>
                     {% if is_admin_view %}
                     <a href="/admin?empresa={{ empresa_activa.slug }}" class="btn-secondary-custom">Ir al panel admin</a>
                     {% endif %}
+                </div>
+                <div class="share-actions-panel">
+                    <div class="share-actions-panel__title">Acciones rápidas para compartir</div>
+                    <div class="share-actions-panel__buttons">
+                        <button
+                            type="button"
+                            id="copyCatalogLinkBtn"
+                            class="btn-secondary-custom"
+                            data-catalog-url="{{ catalogo_public_url }}"
+                        >
+                            Copiar link del catálogo
+                        </button>
+                        <a
+                            href="{{ whatsapp_share_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="btn-whatsapp-custom"
+                        >
+                            Compartir por WhatsApp
+                        </a>
+                    </div>
                 </div>
                 <div id="copyCatalogLinkFeedback" class="copy-feedback" role="status" aria-live="polite"></div>
             </div>
