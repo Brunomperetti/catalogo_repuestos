@@ -841,6 +841,7 @@ def cliente_panel(
         return HTMLResponse("<h1>Usuario sin empresa asignada</h1>", status_code=403)
 
     import time
+    catalogo_public_url = str(request.url_for("catalogo", slug=empresa_activa.slug))
     response = templates.TemplateResponse(
         "cliente_panel.html",
         {
@@ -850,6 +851,7 @@ def cliente_panel(
             "empresa_activa": empresa_activa,
             "empresa_query": empresa_activa.slug,
             "empresa_logo_url": get_empresa_logo_url(empresa_activa),
+            "catalogo_public_url": catalogo_public_url,
             "time": int(time.time()),
             "app_build": APP_BUILD,
             "is_admin_view": user.rol == "admin",
