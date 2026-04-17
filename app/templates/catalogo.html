@@ -201,6 +201,81 @@
         .sort-select {
             min-width: 170px;
         }
+
+        .buyer-data-trigger {
+            background: rgba(15,23,42,0.65);
+            border: 1px solid rgba(148,163,184,0.35);
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+        }
+
+        .buyer-data-status {
+            font-size: 0.82rem;
+            color: #93c5fd;
+            margin-top: 3px;
+        }
+
+        .buyer-data-status.complete {
+            color: #86efac;
+        }
+
+        .buyer-data-summary {
+            font-size: 0.78rem;
+            color: #cbd5e1;
+            margin-top: 2px;
+        }
+
+        .buyer-modal .modal-content {
+            background: #0b1120;
+            color: #e5e7eb;
+            border: 1px solid rgba(56,189,248,0.4);
+        }
+
+        .buyer-modal .form-control {
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(148,163,184,0.5);
+            color: #e5e7eb;
+        }
+
+        .buyer-modal .form-control:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 0.15rem rgba(56,189,248,0.25);
+        }
+
+        .buyer-modal .required-dot {
+            color: #f87171;
+            font-weight: 700;
+        }
+
+        body.light-mode .buyer-data-trigger {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
+
+        body.light-mode .buyer-data-status {
+            color: #1d4ed8;
+        }
+
+        body.light-mode .buyer-data-status.complete {
+            color: #15803d;
+        }
+
+        body.light-mode .buyer-data-summary {
+            color: #334155;
+        }
+
+        body.light-mode .buyer-modal .modal-content {
+            background: #ffffff;
+            color: #0f172a;
+            border-color: #cbd5e1;
+        }
+
+        body.light-mode .buyer-modal .form-control {
+            background: #f8fafc;
+            color: #111827;
+            border-color: #cbd5e1;
+        }
         /* CARDS PREMIUM RESTAURADAS */
         .catalog-card {
             position: relative;
@@ -609,6 +684,21 @@
 
     <div class="total-box mt-auto">
 
+        <div class="buyer-data-trigger">
+            <div class="d-flex justify-content-between align-items-center gap-2">
+                <div>
+                    <div class="fw-semibold">Datos del comprador</div>
+                    <div id="buyer-data-status" class="buyer-data-status">
+                        Te los vamos a pedir al finalizar el pedido.
+                    </div>
+                    <div id="buyer-data-summary" class="buyer-data-summary"></div>
+                </div>
+                <button class="btn btn-sm btn-outline-light" onclick="abrirModalComprador()">
+                    Completar
+                </button>
+            </div>
+        </div>
+
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
                 <div class="total-label">Total estimado</div>
@@ -681,6 +771,56 @@
   </div>
 </div>
 
+<!-- 🧑‍💼 MODAL DATOS DEL COMPRADOR -->
+<div class="modal fade buyer-modal" id="modalComprador" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="buyer-form" onsubmit="guardarDatosComprador(event)">
+        <div class="modal-header">
+          <h5 class="modal-title">Datos del comprador</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small mb-3 text-secondary">Completá estos datos para enviar o descargar el pedido.</p>
+
+          <div class="mb-2">
+            <label class="form-label mb-1">Nombre y apellido <span class="required-dot">*</span></label>
+            <input type="text" class="form-control" id="buyer-nombre" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">Comercio / empresa <span class="required-dot">*</span></label>
+            <input type="text" class="form-control" id="buyer-comercio" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">Teléfono <span class="required-dot">*</span></label>
+            <input type="text" class="form-control" id="buyer-telefono" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">Dirección <span class="required-dot">*</span></label>
+            <input type="text" class="form-control" id="buyer-direccion" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">CUIT (opcional)</label>
+            <input type="text" class="form-control" id="buyer-cuit">
+          </div>
+          <div class="mb-2">
+            <label class="form-label mb-1">Email (opcional)</label>
+            <input type="email" class="form-control" id="buyer-email">
+          </div>
+          <div>
+            <label class="form-label mb-1">Observaciones (opcional)</label>
+            <textarea class="form-control" id="buyer-observaciones" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">Guardar datos</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- JS BOOTSTRAP -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -689,13 +829,138 @@ let pedido = [];
 let productos = {{ productos_json|tojson }};
 let modal = new bootstrap.Modal(document.getElementById('modalProducto'));
 let offcanvasCarrito = new bootstrap.Offcanvas(document.getElementById('offcanvasCarrito'));
+let modalComprador = new bootstrap.Modal(document.getElementById('modalComprador'));
 let nombreEmpresa = "{{ empresa.nombre if empresa else '' }}";
+let pedidoStorageKey = "buyer_data_{{ empresa.slug if empresa else 'catalogo' }}";
+let pendingCheckoutAction = null;
 
 let favorites = new Set(JSON.parse(localStorage.getItem('catalog_favorites') || '[]'));
 let showFavoritesOnly = false;
 let currentView = 'grid';
 let currentCategory = '';
 let searchQuery = '';
+
+let buyerData = {
+    nombre: "",
+    comercio: "",
+    telefono: "",
+    direccion: "",
+    cuit: "",
+    email: "",
+    observaciones: ""
+};
+
+function sanitizeInput(value) {
+    return (value || "").toString().trim();
+}
+
+function hydrateBuyerData() {
+    const saved = localStorage.getItem(pedidoStorageKey);
+    if (!saved) return;
+    try {
+        const parsed = JSON.parse(saved);
+        buyerData = {
+            nombre: sanitizeInput(parsed.nombre),
+            comercio: sanitizeInput(parsed.comercio),
+            telefono: sanitizeInput(parsed.telefono),
+            direccion: sanitizeInput(parsed.direccion),
+            cuit: sanitizeInput(parsed.cuit),
+            email: sanitizeInput(parsed.email),
+            observaciones: sanitizeInput(parsed.observaciones)
+        };
+    } catch (e) {
+        console.warn("No se pudieron recuperar los datos del comprador.", e);
+    }
+}
+
+function syncBuyerForm() {
+    document.getElementById("buyer-nombre").value = buyerData.nombre;
+    document.getElementById("buyer-comercio").value = buyerData.comercio;
+    document.getElementById("buyer-telefono").value = buyerData.telefono;
+    document.getElementById("buyer-direccion").value = buyerData.direccion;
+    document.getElementById("buyer-cuit").value = buyerData.cuit;
+    document.getElementById("buyer-email").value = buyerData.email;
+    document.getElementById("buyer-observaciones").value = buyerData.observaciones;
+}
+
+function buyerDataErrors(data = buyerData) {
+    const errors = [];
+    if (!sanitizeInput(data.nombre)) errors.push("Completá nombre y apellido.");
+    if (!sanitizeInput(data.comercio)) errors.push("Completá comercio o empresa.");
+    if (!sanitizeInput(data.telefono)) errors.push("Completá teléfono.");
+    if (!sanitizeInput(data.direccion)) errors.push("Completá dirección.");
+    if (sanitizeInput(data.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        errors.push("El email no tiene un formato válido.");
+    }
+    return errors;
+}
+
+function buyerDataIsComplete() {
+    return buyerDataErrors().length === 0;
+}
+
+function saveBuyerData() {
+    localStorage.setItem(pedidoStorageKey, JSON.stringify(buyerData));
+    updateBuyerDataStatus();
+}
+
+function updateBuyerDataStatus() {
+    const statusEl = document.getElementById("buyer-data-status");
+    const summaryEl = document.getElementById("buyer-data-summary");
+    if (buyerDataIsComplete()) {
+        statusEl.textContent = "Listo para enviar o descargar.";
+        statusEl.classList.add("complete");
+        summaryEl.textContent = `${buyerData.nombre} · ${buyerData.comercio}`;
+    } else {
+        statusEl.textContent = "Te los vamos a pedir al finalizar el pedido.";
+        statusEl.classList.remove("complete");
+        summaryEl.textContent = "";
+    }
+}
+
+function abrirModalComprador() {
+    syncBuyerForm();
+    modalComprador.show();
+}
+
+function guardarDatosComprador(event) {
+    event.preventDefault();
+    const data = {
+        nombre: sanitizeInput(document.getElementById("buyer-nombre").value),
+        comercio: sanitizeInput(document.getElementById("buyer-comercio").value),
+        telefono: sanitizeInput(document.getElementById("buyer-telefono").value),
+        direccion: sanitizeInput(document.getElementById("buyer-direccion").value),
+        cuit: sanitizeInput(document.getElementById("buyer-cuit").value),
+        email: sanitizeInput(document.getElementById("buyer-email").value),
+        observaciones: sanitizeInput(document.getElementById("buyer-observaciones").value)
+    };
+
+    const errors = buyerDataErrors(data);
+    if (errors.length) {
+        alert(errors[0]);
+        return;
+    }
+
+    buyerData = data;
+    saveBuyerData();
+    modalComprador.hide();
+
+    if (pendingCheckoutAction) {
+        const action = pendingCheckoutAction;
+        pendingCheckoutAction = null;
+        action();
+    }
+}
+
+function requireBuyerData(onReady) {
+    if (buyerDataIsComplete()) {
+        onReady();
+        return;
+    }
+    pendingCheckoutAction = onReady;
+    syncBuyerForm();
+    modalComprador.show();
+}
 
 const wrappers = Array.from(document.querySelectorAll('.product-wrapper'));
 const gridContainer = document.getElementById('productos-grid');
@@ -838,22 +1103,34 @@ function enviarWhatsApp() {
         return;
     }
 
-    let mensaje = nombreEmpresa
-        ? `Pedido de productos – ${nombreEmpresa}:%0A%0A`
-        : "Pedido de productos:%0A%0A";
+    requireBuyerData(() => {
+        let mensaje = nombreEmpresa
+            ? `Pedido de productos – ${nombreEmpresa}:%0A%0A`
+            : "Pedido de productos:%0A%0A";
 
-    let total = 0;
+        mensaje += `*Datos del comprador*%0A`;
+        mensaje += `• Nombre: ${buyerData.nombre}%0A`;
+        mensaje += `• Comercio: ${buyerData.comercio}%0A`;
+        mensaje += `• Teléfono: ${buyerData.telefono}%0A`;
+        mensaje += `• Dirección: ${buyerData.direccion}%0A`;
+        if (buyerData.cuit) mensaje += `• CUIT: ${buyerData.cuit}%0A`;
+        if (buyerData.email) mensaje += `• Email: ${buyerData.email}%0A`;
+        if (buyerData.observaciones) mensaje += `• Observaciones: ${buyerData.observaciones}%0A`;
+        mensaje += `%0A*Detalle del pedido*%0A`;
 
-    pedido.forEach(item => {
-        const subtotal = item.precio * item.cantidad;
-        total += subtotal;
-        mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}%0A%0A`;
+        let total = 0;
+
+        pedido.forEach(item => {
+            const subtotal = item.precio * item.cantidad;
+            total += subtotal;
+            mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}%0A`;
+        });
+
+        mensaje += `%0ATOTAL ESTIMADO: $${total.toFixed(2)}%0A`;
+
+        let numero = "{{ empresa.whatsapp if empresa else '5493510000000' }}";
+        window.open("https://wa.me/" + numero + "?text=" + mensaje, "_blank");
     });
-
-    mensaje += `TOTAL: $${total.toFixed(2)}%0A`;
-
-    let numero = "{{ empresa.whatsapp if empresa else '5493510000000' }}";
-    window.open("https://wa.me/" + numero + "?text=" + mensaje, "_blank");
 }
 
 /* Descargar pedido en PDF (llama a /pedido/pdf) */
@@ -862,32 +1139,34 @@ function descargarPDF() {
         alert("No hay productos en el pedido.");
         return;
     }
+    requireBuyerData(() => {
+        const data = {
+            empresa: nombreEmpresa,
+            buyer: buyerData,
+            items: pedido
+        };
 
-    const data = {
-        empresa: nombreEmpresa,
-        items: pedido
-    };
-
-    fetch("/pedido/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-    })
-    .then(resp => {
-        if (!resp.ok) throw new Error("Error generando PDF");
-        return resp.blob();
-    })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "pedido.pdf";
-        a.click();
-        window.URL.revokeObjectURL(url);
-    })
-    .catch(err => {
-        console.error(err);
-        alert("Hubo un error al generar el PDF.");
+        fetch("/pedido/pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+        .then(resp => {
+            if (!resp.ok) throw new Error("Error generando PDF");
+            return resp.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "pedido.pdf";
+            a.click();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Hubo un error al generar el PDF.");
+        });
     });
 }
 
@@ -897,29 +1176,40 @@ function enviarEmail() {
         alert("No hay productos en el pedido.");
         return;
     }
+    requireBuyerData(() => {
+        let asunto = nombreEmpresa
+            ? `Pedido de productos – ${nombreEmpresa}`
+            : "Pedido de productos";
 
-    let asunto = nombreEmpresa
-        ? `Pedido de productos – ${nombreEmpresa}`
-        : "Pedido de productos";
+        let cuerpo = nombreEmpresa
+            ? `Pedido de productos – ${nombreEmpresa}\n\n`
+            : "Pedido de productos:\n\n";
 
-    let cuerpo = nombreEmpresa
-        ? `Pedido de productos – ${nombreEmpresa}\n\n`
-        : "Pedido de productos:\n\n";
+        cuerpo += `Datos del comprador\n`;
+        cuerpo += `Nombre: ${buyerData.nombre}\n`;
+        cuerpo += `Comercio: ${buyerData.comercio}\n`;
+        cuerpo += `Teléfono: ${buyerData.telefono}\n`;
+        cuerpo += `Dirección: ${buyerData.direccion}\n`;
+        if (buyerData.cuit) cuerpo += `CUIT: ${buyerData.cuit}\n`;
+        if (buyerData.email) cuerpo += `Email: ${buyerData.email}\n`;
+        if (buyerData.observaciones) cuerpo += `Observaciones: ${buyerData.observaciones}\n`;
+        cuerpo += `\nDetalle del pedido\n`;
 
-    let total = 0;
+        let total = 0;
 
-    pedido.forEach(item => {
-        const subtotal = item.precio * item.cantidad;
-        total += subtotal;
-        cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}\n\n`;
+        pedido.forEach(item => {
+            const subtotal = item.precio * item.cantidad;
+            total += subtotal;
+            cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}\n`;
+        });
+
+        cuerpo += `\nTOTAL: $${total.toFixed(2)}\n`;
+
+        const mailtoLink = "mailto:?subject=" + encodeURIComponent(asunto) +
+                           "&body=" + encodeURIComponent(cuerpo);
+
+        window.location.href = mailtoLink;
     });
-
-    cuerpo += `TOTAL: $${total.toFixed(2)}\n`;
-
-    const mailtoLink = "mailto:?subject=" + encodeURIComponent(asunto) +
-                       "&body=" + encodeURIComponent(cuerpo);
-
-    window.location.href = mailtoLink;
 }
 /* ---------- FAVORITOS ---------- */
 function toggleFavorito(event, id) {
@@ -1089,6 +1379,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // iniciar
+    hydrateBuyerData();
+    syncBuyerForm();
+    updateBuyerDataStatus();
     syncFavoritesUI();
     applyFiltersAndSort();
 });
@@ -1096,7 +1389,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
-
-
-
-

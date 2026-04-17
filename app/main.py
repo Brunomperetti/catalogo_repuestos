@@ -1543,28 +1543,62 @@ async def generar_pdf(data: dict):
 
     empresa = data.get("empresa", "Pedido")
     items: List[dict] = data.get("items", [])
+    buyer: dict = data.get("buyer", {}) or {}
+
+    buyer_nombre = str(buyer.get("nombre", "")).strip()
+    buyer_comercio = str(buyer.get("comercio", "")).strip()
+    buyer_telefono = str(buyer.get("telefono", "")).strip()
+    buyer_direccion = str(buyer.get("direccion", "")).strip()
+    buyer_cuit = str(buyer.get("cuit", "")).strip()
+    buyer_email = str(buyer.get("email", "")).strip()
+    buyer_obs = str(buyer.get("observaciones", "")).strip()
 
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
 
     y = A4[1] - 40
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(40, y, empresa)
-    y -= 40
+    x = 40
+    bottom_limit = 55
 
-    total = 0
-    c.setFont("Helvetica", 11)
+    def draw_line(text: str, font: str = "Helvetica", size: int = 11, indent: int = 0, line_gap: int = 17):
+        nonlocal y
+        if y <= bottom_limit:
+            c.showPage()
+            y = A4[1] - 40
+        c.setFont(font, size)
+        c.drawString(x + indent, y, text)
+        y -= line_gap
 
+    draw_line(empresa, font="Helvetica-Bold", size=18, line_gap=30)
+
+    draw_line("Datos del comprador", font="Helvetica-Bold", size=12, line_gap=18)
+    draw_line(f"Nombre y apellido: {buyer_nombre or '-'}")
+    draw_line(f"Comercio / empresa: {buyer_comercio or '-'}")
+    draw_line(f"Teléfono: {buyer_telefono or '-'}")
+    draw_line(f"Dirección: {buyer_direccion or '-'}")
+    if buyer_cuit:
+        draw_line(f"CUIT: {buyer_cuit}")
+    if buyer_email:
+        draw_line(f"Email: {buyer_email}")
+    if buyer_obs:
+        draw_line(f"Observaciones: {buyer_obs}")
+
+    y -= 5
+    draw_line("Detalle del pedido", font="Helvetica-Bold", size=12, line_gap=18)
+
+    total = 0.0
     for item in items:
-        subtotal = item["precio"] * item["cantidad"]
-        c.drawString(40, y, f'{item["cantidad"]}x {item["codigo"]} - {item["descripcion"]}')
-        y -= 18
-        c.drawString(60, y, f'${subtotal:.2f}')
-        y -= 22
+        cantidad = float(item.get("cantidad", 0))
+        precio = float(item.get("precio", 0))
+        subtotal = precio * cantidad
+        codigo = item.get("codigo", "")
+        descripcion = item.get("descripcion", "")
+        draw_line(f'{int(cantidad)}x {codigo} - {descripcion}')
+        draw_line(f'${precio:.2f} c/u · Subtotal: ${subtotal:.2f}', indent=15, line_gap=19)
         total += subtotal
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, y, f"TOTAL: ${total:.2f}")
+    y -= 5
+    draw_line(f"TOTAL ESTIMADO: ${total:.2f}", font="Helvetica-Bold", size=14, line_gap=20)
 
     c.save()
     buffer.seek(0)
