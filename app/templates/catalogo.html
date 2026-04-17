@@ -829,10 +829,14 @@ let pedido = [];
 let productos = {{ productos_json|tojson }};
 let modal = new bootstrap.Modal(document.getElementById('modalProducto'));
 let offcanvasCarrito = new bootstrap.Offcanvas(document.getElementById('offcanvasCarrito'));
-let modalComprador = new bootstrap.Modal(document.getElementById('modalComprador'));
+const modalCompradorEl = document.getElementById('modalComprador');
+let modalComprador = new bootstrap.Modal(modalCompradorEl);
 let nombreEmpresa = "{{ empresa.nombre if empresa else '' }}";
 let pedidoStorageKey = "buyer_data_{{ empresa.slug if empresa else 'catalogo' }}";
 let pendingCheckoutAction = null;
+modalCompradorEl.addEventListener('hidden.bs.modal', () => {
+    pendingCheckoutAction = null;
+});
 
 let favorites = new Set(JSON.parse(localStorage.getItem('catalog_favorites') || '[]'));
 let showFavoritesOnly = false;
