@@ -365,6 +365,60 @@ img[src*="no-image"] {
     grid-column: 1 / -1;
 }
 
+.admin-card--empresa-main {
+    grid-column: 1 / 2;
+}
+
+.admin-card--empresa-visual {
+    grid-column: 2 / 3;
+}
+
+.section-eyebrow {
+    margin: 0 0 8px 0;
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #86efac;
+}
+
+.empresa-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.empresa-subsection {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 20px;
+    padding: 18px;
+}
+
+.subsection-heading {
+    margin-bottom: 14px;
+}
+
+.subsection-heading h3 {
+    margin: 0 0 5px 0;
+    color: #e2e8f0;
+    font-size: 1.02rem;
+    font-weight: 800;
+}
+
+.subsection-heading p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.empresa-divider {
+    height: 1px;
+    width: 100%;
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.04), rgba(56, 189, 248, 0.36), rgba(56, 189, 248, 0.04));
+}
+
 .admin-card--danger {
     border-color: rgba(239, 68, 68, 0.18);
     background: linear-gradient(180deg, rgba(22, 10, 16, 0.94), rgba(12, 8, 15, 0.92));
@@ -778,6 +832,12 @@ img[src*="no-image"] {
         grid-template-columns: 1fr;
     }
 
+    .admin-card--empresa-main,
+    .admin-card--empresa-visual,
+    .admin-card--wide {
+        grid-column: auto;
+    }
+
     .steps-grid {
         grid-template-columns: 1fr;
     }
@@ -798,10 +858,6 @@ img[src*="no-image"] {
 
     .form-grid {
         grid-template-columns: 1fr;
-    }
-
-    .admin-card--wide {
-        grid-column: auto;
     }
 }
 
