@@ -312,6 +312,7 @@ img[src*="no-image"] {
     font-weight: 700;
     font-size: 0.9rem;
     transition: all .2s ease;
+    cursor: pointer;
 }
 
 .admin-tab:hover {
@@ -343,6 +344,10 @@ img[src*="no-image"] {
 
 .admin-tab-panel.is-active {
     display: block;
+}
+
+.admin-tab-panel[hidden] {
+    display: none !important;
 }
 
 .admin-grid {

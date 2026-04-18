@@ -70,14 +70,14 @@
 
     <section class="tabs-shell">
         <nav class="admin-tabs" role="tablist" aria-label="Secciones del panel admin">
-            <button class="admin-tab is-active" type="button" role="tab" aria-selected="true" data-tab-target="empresa">Empresa</button>
-            <button class="admin-tab" type="button" role="tab" aria-selected="false" data-tab-target="productos">Productos</button>
-            <button class="admin-tab" type="button" role="tab" aria-selected="false" data-tab-target="usuarios">Usuarios</button>
-            <button class="admin-tab" type="button" role="tab" aria-selected="false" data-tab-target="backup">Backup</button>
-            <button class="admin-tab admin-tab--warning" type="button" role="tab" aria-selected="false" data-tab-target="avanzado">Avanzado</button>
+            <button id="tab-empresa" class="admin-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-empresa" data-tab-target="empresa">Empresa</button>
+            <button id="tab-productos" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-productos" data-tab-target="productos">Productos</button>
+            <button id="tab-usuarios" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-usuarios" data-tab-target="usuarios">Usuarios</button>
+            <button id="tab-backup" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-backup" data-tab-target="backup">Backup</button>
+            <button id="tab-avanzado" class="admin-tab admin-tab--warning" type="button" role="tab" aria-selected="false" aria-controls="panel-avanzado" data-tab-target="avanzado">Avanzado</button>
         </nav>
 
-        <section class="admin-tab-panel is-active" data-tab-panel="empresa">
+        <section id="panel-empresa" class="admin-tab-panel is-active" role="tabpanel" aria-labelledby="tab-empresa" data-tab-panel="empresa">
             <div class="admin-grid">
                 {% if empresa_activa %}
                 <section class="admin-card">
@@ -195,7 +195,7 @@
             </div>
         </section>
 
-        <section class="admin-tab-panel" data-tab-panel="productos">
+        <section id="panel-productos" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-productos" data-tab-panel="productos" hidden>
             <div class="admin-grid">
                 <section class="admin-card admin-card--wide">
                     <div class="card-header-custom">
@@ -272,7 +272,7 @@
             </div>
         </section>
 
-        <section class="admin-tab-panel" data-tab-panel="usuarios">
+        <section id="panel-usuarios" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-usuarios" data-tab-panel="usuarios" hidden>
             <div class="admin-grid">
                 <section class="admin-card admin-card--wide">
                     <div class="card-header-custom">
@@ -311,7 +311,7 @@
             </div>
         </section>
 
-        <section class="admin-tab-panel" data-tab-panel="backup">
+        <section id="panel-backup" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-backup" data-tab-panel="backup" hidden>
             <div class="admin-grid">
                 <section class="admin-card admin-card--wide">
                     <div class="card-header-custom">
@@ -356,7 +356,7 @@
             </div>
         </section>
 
-        <section class="admin-tab-panel" data-tab-panel="avanzado">
+        <section id="panel-avanzado" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-avanzado" data-tab-panel="avanzado" hidden>
             <div class="admin-grid">
                 <section class="admin-card admin-card--danger admin-card--wide danger-zone-card">
                     <div class="danger-zone-header">
@@ -399,11 +399,19 @@ function toggleSlugEdit() {
             const isActive = tab.dataset.tabTarget === name;
             tab.classList.toggle('is-active', isActive);
             tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            tab.setAttribute('tabindex', isActive ? '0' : '-1');
         });
 
         panels.forEach((panel) => {
-            panel.classList.toggle('is-active', panel.dataset.tabPanel === name);
+            const isActive = panel.dataset.tabPanel === name;
+            panel.classList.toggle('is-active', isActive);
+            panel.hidden = !isActive;
         });
+    }
+
+    function getValidTabFromHash() {
+        const tabName = window.location.hash ? window.location.hash.replace('#', '') : '';
+        return tabs.some((tab) => tab.dataset.tabTarget === tabName) ? tabName : '';
     }
 
     tabs.forEach((tab) => {
@@ -415,10 +423,12 @@ function toggleSlugEdit() {
         });
     });
 
-    const hashTab = window.location.hash ? window.location.hash.replace('#', '') : '';
     const defaultTab = tabs[0].dataset.tabTarget;
-    const hasHashTab = tabs.some((t) => t.dataset.tabTarget === hashTab);
-    activateTab(hasHashTab ? hashTab : defaultTab);
+    activateTab(getValidTabFromHash() || defaultTab);
+
+    window.addEventListener('hashchange', () => {
+        activateTab(getValidTabFromHash() || defaultTab);
+    });
 })();
 </script>
 
