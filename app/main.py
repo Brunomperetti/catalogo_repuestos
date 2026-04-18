@@ -34,6 +34,8 @@ APP_BUILD = "2026-04-15-cachefix-v3"
 STORAGE_DIR = Path(os.getenv("STORAGE_DIR", "app/storage")).resolve()
 MEDIA_BASE_DIR = STORAGE_DIR / "empresas"
 MEDIA_URL_PREFIX = "/media"
+PRODUCTOS_MEDIA_TYPE = "productos"
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 app.add_middleware(
@@ -269,6 +271,60 @@ def get_empresa_media_dir(slug: str, media_type: str) -> Path:
 
 def build_media_url(slug: str, media_type: str, filename: str) -> str:
     return f"{MEDIA_URL_PREFIX}/empresas/{slug}/{media_type}/{filename}"
+
+
+def get_productos_media_dir(slug: str) -> Path:
+    return get_empresa_media_dir(slug, PRODUCTOS_MEDIA_TYPE)
+
+
+def sanitize_codigo_for_filename(codigo: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9._\-]", "_", (codigo or "").strip())
+    return safe or "producto"
+
+
+def build_producto_media_url(slug: str, filename: str) -> str:
+    return build_media_url(slug, PRODUCTOS_MEDIA_TYPE, filename)
+
+
+def _copy_file(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with open(source, "rb") as src, open(destination, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+
+
+def resolve_producto_imagen_url(producto: models.Producto, empresa_slug: str, migrate_legacy: bool = True) -> str:
+    productos_dir = get_productos_media_dir(empresa_slug)
+    productos_dir.mkdir(parents=True, exist_ok=True)
+    fallback_url = "/static/img/no-image.png"
+    codigo_safe = sanitize_codigo_for_filename(producto.codigo)
+
+    existing_name = ""
+    if producto.imagen_url:
+        existing_name = Path(producto.imagen_url).name
+        if existing_name:
+            current_path = productos_dir / existing_name
+            if current_path.exists():
+                return build_producto_media_url(empresa_slug, existing_name)
+
+    for ext in ALLOWED_IMAGE_EXTENSIONS:
+        candidate = productos_dir / f"{codigo_safe}{ext}"
+        if candidate.exists():
+            return build_producto_media_url(empresa_slug, candidate.name)
+
+    legacy_dir = Path("app/static/empresas") / empresa_slug / "productos"
+    if legacy_dir.exists():
+        for ext in ALLOWED_IMAGE_EXTENSIONS:
+            legacy_file = legacy_dir / f"{codigo_safe}{ext}"
+            if legacy_file.exists():
+                if migrate_legacy:
+                    target_name = existing_name if existing_name else legacy_file.name
+                    target_path = productos_dir / target_name
+                    if not target_path.exists():
+                        _copy_file(legacy_file, target_path)
+                    return build_producto_media_url(empresa_slug, target_name)
+                return f"/static/empresas/{empresa_slug}/productos/{legacy_file.name}"
+
+    return fallback_url
 
 
 def build_unique_slug(db: Session, base_slug: str) -> str:
@@ -719,21 +775,26 @@ async def actualizar_producto(
     # actualizar imagen individual
     if imagen:
         empresa = producto.empresa
-        img_path = Path(f"app/static/empresas/{empresa.slug}/productos")
+        img_path = get_productos_media_dir(empresa.slug)
         img_path.mkdir(parents=True, exist_ok=True)
+        codigo_safe = sanitize_codigo_for_filename(producto.codigo)
 
         # borrar imágenes viejas
-        for ext in [".jpg", ".png", ".jpeg", ".webp"]:
-            old = img_path / f"{producto.codigo}{ext}"
+        for ext in ALLOWED_IMAGE_EXTENSIONS:
+            old = img_path / f"{codigo_safe}{ext}"
             if old.exists():
                 old.unlink()
 
         # guardar nueva imagen
         ext = Path(imagen.filename).suffix.lower()
-        filename = f"{producto.codigo}{ext}"
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            ext = ".jpg"
+        filename = f"{codigo_safe}{ext}"
 
         with open(img_path / filename, "wb") as f:
             f.write(await imagen.read())
+
+        producto.imagen_url = build_producto_media_url(empresa.slug, filename)
 
     db.commit()
     target_empresa = empresa_slug or (producto.empresa.slug if producto.empresa else "")
@@ -906,10 +967,7 @@ async def crear_empresa_panel(
     db.commit()
     db.refresh(empresa)
 
-    base_path = Path("app/static/empresas") / empresa.slug
-    productos_path = base_path / "productos"
-    base_path.mkdir(parents=True, exist_ok=True)
-    productos_path.mkdir(exist_ok=True)
+    get_productos_media_dir(empresa.slug).mkdir(parents=True, exist_ok=True)
 
     if logo:
         empresa.logo_url = await replace_empresa_media(empresa, media_type="logo", upload=logo)
@@ -1083,24 +1141,40 @@ def upload_zip(
         return user
 
     try:
-        temp_path = "temp_images.zip"
-
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
         empresa = can_access_empresa(user, empresa_slug, db)
         if not empresa:
             return redirect_for_user(user, error="Empresa inválida.")
 
-        IMAGES_PATH = f"app/static/empresas/{empresa.slug}/productos/"
-        os.makedirs(IMAGES_PATH, exist_ok=True)
+        images_dir = get_productos_media_dir(empresa.slug)
+        images_dir.mkdir(parents=True, exist_ok=True)
+        copied = 0
 
-        with zipfile.ZipFile(temp_path, "r") as zip_ref:
-            zip_ref.extractall(IMAGES_PATH)
+        with zipfile.ZipFile(file.file, "r") as zip_ref:
+            for member, safe_path in _zip_safe_members(zip_ref):
+                ext = safe_path.suffix.lower()
+                if ext not in ALLOWED_IMAGE_EXTENSIONS:
+                    continue
 
-        os.remove(temp_path)
+                code_raw = clean_text(safe_path.stem, default="")
+                code_name = sanitize_codigo_for_filename(code_raw)
+                filename = f"{code_name}{ext}"
+                destination = images_dir / filename
+                with zip_ref.open(member, "r") as src, open(destination, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                producto = (
+                    db.query(models.Producto)
+                    .filter(
+                        models.Producto.empresa_id == empresa.id,
+                        models.Producto.codigo == code_raw
+                    )
+                    .first()
+                )
+                if producto:
+                    producto.imagen_url = build_producto_media_url(empresa.slug, filename)
+                copied += 1
 
-        return redirect_for_user(user, empresa_slug=empresa.slug, msg="Imágenes cargadas correctamente.")
+        db.commit()
+        return redirect_for_user(user, empresa_slug=empresa.slug, msg=f"Imágenes cargadas correctamente ({copied} archivos).")
 
     except Exception as e:
         print("Error ZIP:", e)
@@ -1244,6 +1318,15 @@ def importar_empresa_completa(
                 codigo = clean_text(p.get("codigo", ""), default="")
                 if not codigo:
                     continue
+                codigo_safe = sanitize_codigo_for_filename(codigo)
+                imported_url = clean_text(p.get("imagen_url", ""), default="") or None
+                normalized_imagen_url = None
+                if imported_url:
+                    imported_name = Path(imported_url).name
+                    if imported_name:
+                        normalized_imagen_url = build_producto_media_url(target_slug, imported_name)
+                if not normalized_imagen_url:
+                    normalized_imagen_url = build_producto_media_url(target_slug, f"{codigo_safe}.jpg")
                 db.add(models.Producto(
                     empresa_id=target_empresa.id,
                     codigo=codigo,
@@ -1253,13 +1336,26 @@ def importar_empresa_completa(
                     precio=clean_price(p.get("precio", 0), default=0.0),
                     stock=clean_stock(p.get("stock", 0), default=0),
                     activo=bool(p.get("activo", True)),
-                    imagen_url=clean_text(p.get("imagen_url", ""), default="") or None,
+                    imagen_url=normalized_imagen_url,
                 ))
 
             static_target_dir = Path("app/static/empresas") / target_slug
             storage_target_dir = MEDIA_BASE_DIR / target_slug
             _copy_zip_prefix(zip_ref, "static_empresas", static_target_dir)
             _copy_zip_prefix(zip_ref, "storage_empresas", storage_target_dir)
+
+            legacy_productos_dir = static_target_dir / "productos"
+            persistent_productos_dir = get_productos_media_dir(target_slug)
+            if legacy_productos_dir.exists():
+                persistent_productos_dir.mkdir(parents=True, exist_ok=True)
+                for legacy_file in legacy_productos_dir.rglob("*"):
+                    if not legacy_file.is_file():
+                        continue
+                    if legacy_file.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+                        continue
+                    destination = persistent_productos_dir / legacy_file.name
+                    if not destination.exists():
+                        _copy_file(legacy_file, destination)
 
             db.add(target_empresa)
             db.commit()
@@ -1327,18 +1423,15 @@ def catalogo(
 
     productos = query_db.all()
 
-    # armar imagen_url dinámicamente por código
+    changed_image_urls = False
     for p in productos:
-        base_path = f"app/static/empresas/{empresa.slug}/productos"
-        png_path = f"{base_path}/{p.codigo}.png"
-        jpg_path = f"{base_path}/{p.codigo}.jpg"
+        resolved_url = resolve_producto_imagen_url(p, empresa.slug, migrate_legacy=True)
+        if p.imagen_url != resolved_url:
+            p.imagen_url = resolved_url
+            changed_image_urls = True
 
-        if os.path.exists(png_path):
-            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.png"
-        elif os.path.exists(jpg_path):
-            p.imagen_url = f"/static/empresas/{empresa.slug}/productos/{p.codigo}.jpg"
-        else:
-            p.imagen_url = "/static/img/no-image.png"
+    if changed_image_urls:
+        db.commit()
 
 
 
@@ -1658,13 +1751,13 @@ def borrar_empresa(request: Request, empresa_id: int, db: Session = Depends(get_
 # DEBUG: LISTAR ARCHIVOS DE IMAGEN DE UNA EMPRESA
 # ---------------------------------------------------
 @app.get("/debug/imagenes/{slug}")
-def debug_imagenes(request: Request, slug: str):
+def debug_imagenes(request: Request, slug: str, db: Session = Depends(get_db)):
     auth = require_admin(request, db)
     if isinstance(auth, RedirectResponse):
         return auth
 
     slug = (slug or "").strip().lower()
-    path = Path(f"app/static/empresas/{slug}/productos")
+    path = get_productos_media_dir(slug)
     if not path.exists():
         return {"error": "Carpeta no existe", "path": str(path)}
 
