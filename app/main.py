@@ -36,6 +36,8 @@ MEDIA_BASE_DIR = STORAGE_DIR / "empresas"
 MEDIA_URL_PREFIX = "/media"
 PRODUCTOS_MEDIA_TYPE = "productos"
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+PRICE_POLICY_VALUES = {"mostrar", "consultar", "automatico"}
+STOCK_POLICY_VALUES = {"mostrar", "ocultar", "automatico"}
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 MEDIA_BASE_DIR.mkdir(parents=True, exist_ok=True)
 app.add_middleware(
@@ -88,6 +90,26 @@ def ensure_empresa_media_columns():
             conn.execute(text("ALTER TABLE empresas ADD COLUMN logo_url VARCHAR"))
         if "banner_url" not in columns:
             conn.execute(text("ALTER TABLE empresas ADD COLUMN banner_url VARCHAR"))
+        if "politica_precio_catalogo" not in columns:
+            conn.execute(text("ALTER TABLE empresas ADD COLUMN politica_precio_catalogo VARCHAR DEFAULT 'automatico'"))
+        if "politica_stock_catalogo" not in columns:
+            conn.execute(text("ALTER TABLE empresas ADD COLUMN politica_stock_catalogo VARCHAR DEFAULT 'mostrar'"))
+        conn.execute(
+            text(
+                "UPDATE empresas "
+                "SET politica_precio_catalogo = 'automatico' "
+                "WHERE politica_precio_catalogo IS NULL "
+                "OR politica_precio_catalogo NOT IN ('mostrar','consultar','automatico')"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE empresas "
+                "SET politica_stock_catalogo = 'mostrar' "
+                "WHERE politica_stock_catalogo IS NULL "
+                "OR politica_stock_catalogo NOT IN ('mostrar','ocultar','automatico')"
+            )
+        )
 
 
 def ensure_usuario_columns():
@@ -261,6 +283,54 @@ def clean_stock(value, default=0):
         return int(float(value))
     except Exception:
         return default
+
+
+def normalize_price_policy(value: str | None) -> str:
+    policy = clean_text(value, default="automatico").lower()
+    return policy if policy in PRICE_POLICY_VALUES else "automatico"
+
+
+def normalize_stock_policy(value: str | None) -> str:
+    policy = clean_text(value, default="mostrar").lower()
+    return policy if policy in STOCK_POLICY_VALUES else "mostrar"
+
+
+def has_valid_price(value) -> bool:
+    if value is None:
+        return False
+    try:
+        parsed = float(value)
+        return math.isfinite(parsed) and parsed > 0
+    except Exception:
+        return False
+
+
+def resolve_price_display(policy: str, precio) -> dict:
+    price_ok = has_valid_price(precio)
+    if policy == "consultar":
+        return {"mostrar_numerico": False, "texto": "Consultar"}
+    if policy == "automatico":
+        if price_ok:
+            return {"mostrar_numerico": True, "texto": f"${float(precio):,.2f}"}
+        return {"mostrar_numerico": False, "texto": "Consultar"}
+    if price_ok:
+        return {"mostrar_numerico": True, "texto": f"${float(precio):,.2f}"}
+    return {"mostrar_numerico": False, "texto": "Consultar"}
+
+
+def resolve_stock_display(policy: str, stock_value) -> dict:
+    stock_num = clean_stock(stock_value, default=0)
+    if policy == "ocultar":
+        return {"visible": False, "texto": "", "clase": ""}
+    if policy == "automatico" and stock_num <= 0:
+        return {"visible": False, "texto": "", "clase": ""}
+    if stock_num <= 0:
+        return {"visible": True, "texto": "Sin stock", "clase": "stock-gray"}
+    if stock_num <= 15:
+        return {"visible": True, "texto": "Stock bajo", "clase": "stock-red"}
+    if stock_num <= 60:
+        return {"visible": True, "texto": "Stock medio", "clase": "stock-yellow"}
+    return {"visible": True, "texto": "Stock alto", "clase": "stock-green"}
 
 
 def get_empresa_media_dir(slug: str, media_type: str) -> Path:
@@ -662,6 +732,29 @@ def editar_empresa_panel(
 
     return panel_redirect(empresa_slug=empresa.slug, msg="Empresa actualizada correctamente.")
 
+
+@app.post("/empresa/politicas_catalogo")
+def actualizar_politicas_catalogo(
+    request: Request,
+    empresa_slug: str = Form(...),
+    politica_precio_catalogo: str = Form("automatico"),
+    politica_stock_catalogo: str = Form("mostrar"),
+    db: Session = Depends(get_db),
+):
+    auth = require_admin(request, db)
+    if isinstance(auth, RedirectResponse):
+        return auth
+
+    empresa = get_empresa_by_slug(db, empresa_slug)
+    if not empresa:
+        return panel_redirect(error="Empresa no encontrada.")
+
+    empresa.politica_precio_catalogo = normalize_price_policy(politica_precio_catalogo)
+    empresa.politica_stock_catalogo = normalize_stock_policy(politica_stock_catalogo)
+    db.add(empresa)
+    db.commit()
+    return panel_redirect(empresa_slug=empresa.slug, msg="Configuración de visualización actualizada.")
+
 @app.get("/admin/productos", response_class=HTMLResponse)
 @app.get("/cliente/productos", response_class=HTMLResponse)
 def admin_productos(
@@ -961,7 +1054,9 @@ async def crear_empresa_panel(
     empresa = models.Empresa(
         nombre=nombre,
         slug=slug,
-        whatsapp=whatsapp.strip()
+        whatsapp=whatsapp.strip(),
+        politica_precio_catalogo="automatico",
+        politica_stock_catalogo="mostrar",
     )
     db.add(empresa)
     db.commit()
@@ -1205,6 +1300,8 @@ def exportar_empresa_completa(
             "whatsapp": empresa_obj.whatsapp,
             "logo_url": empresa_obj.logo_url,
             "banner_url": empresa_obj.banner_url,
+            "politica_precio_catalogo": normalize_price_policy(empresa_obj.politica_precio_catalogo),
+            "politica_stock_catalogo": normalize_stock_policy(empresa_obj.politica_stock_catalogo),
         },
         "productos": [
             {
@@ -1296,6 +1393,8 @@ def importar_empresa_completa(
                         nombre=clean_text(empresa_data.get("nombre", source_slug), default=source_slug),
                         slug=target_slug,
                         whatsapp=clean_text(empresa_data.get("whatsapp", ""), default="") or None,
+                        politica_precio_catalogo=normalize_price_policy(empresa_data.get("politica_precio_catalogo")),
+                        politica_stock_catalogo=normalize_stock_policy(empresa_data.get("politica_stock_catalogo")),
                     )
                     db.add(target_empresa)
                     db.flush()
@@ -1305,12 +1404,20 @@ def importar_empresa_completa(
                     nombre=clean_text(empresa_data.get("nombre", source_slug), default=source_slug),
                     slug=target_slug,
                     whatsapp=clean_text(empresa_data.get("whatsapp", ""), default="") or None,
+                    politica_precio_catalogo=normalize_price_policy(empresa_data.get("politica_precio_catalogo")),
+                    politica_stock_catalogo=normalize_stock_policy(empresa_data.get("politica_stock_catalogo")),
                 )
                 db.add(target_empresa)
                 db.flush()
 
             target_empresa.nombre = clean_text(empresa_data.get("nombre", target_empresa.nombre), default=target_empresa.nombre)
             target_empresa.whatsapp = clean_text(empresa_data.get("whatsapp", target_empresa.whatsapp or ""), default="") or None
+            target_empresa.politica_precio_catalogo = normalize_price_policy(
+                empresa_data.get("politica_precio_catalogo", target_empresa.politica_precio_catalogo)
+            )
+            target_empresa.politica_stock_catalogo = normalize_stock_policy(
+                empresa_data.get("politica_stock_catalogo", target_empresa.politica_stock_catalogo)
+            )
             target_empresa.logo_url = build_media_url(target_slug, "logo", "logo.png")
             target_empresa.banner_url = build_media_url(target_slug, "banner", "banner.jpg")
 
@@ -1422,6 +1529,8 @@ def catalogo(
     
 
     productos = query_db.all()
+    price_policy = normalize_price_policy(empresa.politica_precio_catalogo)
+    stock_policy = normalize_stock_policy(empresa.politica_stock_catalogo)
 
     changed_image_urls = False
     for p in productos:
@@ -1429,6 +1538,13 @@ def catalogo(
         if p.imagen_url != resolved_url:
             p.imagen_url = resolved_url
             changed_image_urls = True
+        price_display = resolve_price_display(price_policy, p.precio)
+        stock_display = resolve_stock_display(stock_policy, p.stock)
+        p.catalog_price_numeric = price_display["mostrar_numerico"]
+        p.catalog_price_text = price_display["texto"]
+        p.catalog_stock_visible = stock_display["visible"]
+        p.catalog_stock_text = stock_display["texto"]
+        p.catalog_stock_class = stock_display["clase"]
 
     if changed_image_urls:
         db.commit()
@@ -1470,9 +1586,14 @@ def catalogo(
             "codigo": p.codigo,
             "descripcion": p.descripcion,
             "precio": round(float(p.precio), 2),
+            "precio_mostrable": bool(getattr(p, "catalog_price_numeric", False)),
+            "precio_texto": getattr(p, "catalog_price_text", "Consultar"),
             "categoria": p.categoria,
             "marca": p.marca,
             "stock": p.stock,
+            "stock_visible": bool(getattr(p, "catalog_stock_visible", False)),
+            "stock_texto": getattr(p, "catalog_stock_text", ""),
+            "stock_clase": getattr(p, "catalog_stock_class", ""),
             "imagen_url": p.imagen_url,
         }
         for p in productos
@@ -1485,12 +1606,14 @@ def catalogo(
     lista_precios_xlsx_path = export_path / "lista_precios.xlsx"
 
     lista_payload = {
-        "empresa": {
-            "id": empresa.id,
-            "slug": empresa.slug,
-            "nombre": empresa.nombre,
-            "whatsapp": empresa.whatsapp,
-        },
+            "empresa": {
+                "id": empresa.id,
+                "slug": empresa.slug,
+                "nombre": empresa.nombre,
+                "whatsapp": empresa.whatsapp,
+                "politica_precio_catalogo": price_policy,
+                "politica_stock_catalogo": stock_policy,
+            },
         "total_productos": len(productos_json),
         "productos": productos_json,
     }
@@ -1522,6 +1645,8 @@ def catalogo(
             "request": request,
             "productos": productos,
             "productos_json": productos_json,
+            "price_policy": price_policy,
+            "stock_policy": stock_policy,
             "empresa": empresa,
             "categorias": categorias,
             "categoria_actual": categoria,
@@ -1680,18 +1805,28 @@ async def generar_pdf(data: dict):
     draw_line("Detalle del pedido", font="Helvetica-Bold", size=12, line_gap=18)
 
     total = 0.0
+    has_consult_price = False
     for item in items:
         cantidad = float(item.get("cantidad", 0))
         precio = float(item.get("precio", 0))
+        precio_texto = clean_text(item.get("precio_texto", ""), default="")
+        precio_mostrable = bool(item.get("precio_mostrable", True))
         subtotal = precio * cantidad
         codigo = item.get("codigo", "")
         descripcion = item.get("descripcion", "")
         draw_line(f'{int(cantidad)}x {codigo} - {descripcion}')
-        draw_line(f'${precio:.2f} c/u · Subtotal: ${subtotal:.2f}', indent=15, line_gap=19)
-        total += subtotal
+        if precio_mostrable:
+            draw_line(f'${precio:.2f} c/u · Subtotal: ${subtotal:.2f}', indent=15, line_gap=19)
+            total += subtotal
+        else:
+            has_consult_price = True
+            draw_line(f'Precio: {precio_texto or "Consultar"}', indent=15, line_gap=19)
 
     y -= 5
-    draw_line(f"TOTAL ESTIMADO: ${total:.2f}", font="Helvetica-Bold", size=14, line_gap=20)
+    if has_consult_price:
+        draw_line("TOTAL ESTIMADO: Consultar", font="Helvetica-Bold", size=14, line_gap=20)
+    else:
+        draw_line(f"TOTAL ESTIMADO: ${total:.2f}", font="Helvetica-Bold", size=14, line_gap=20)
 
     c.save()
     buffer.seek(0)
