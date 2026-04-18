@@ -20,23 +20,25 @@
     {% endif %}
 
     {% if empresa_activa %}
-    <section class="hero-card">
-        <div class="hero-card__content">
+    <section class="hero-card admin-hero-compact">
+        <div class="hero-card__content admin-hero-grid">
             <div class="hero-card__left">
                 <div class="hero-badge">Empresa activa</div>
-                <h1 class="hero-title">{{ empresa_activa.nombre }}</h1>
-                <p class="hero-subtitle">
-                    Gestioná identidad visual, productos e imágenes desde un solo panel.
-                </p>
+                <h1 class="hero-title hero-title--compact">{{ empresa_activa.nombre }}</h1>
+                <p class="hero-subtitle hero-subtitle--compact">Panel de gestión centralizado para empresa, productos, usuarios y backups.</p>
 
-                <div class="hero-actions">
+                <div class="hero-actions hero-actions--compact">
                     <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-primary-custom">
-                        Ver catálogo 🚗
+                        Ver catálogo
                     </a>
+                    <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-secondary-custom">
+                        Ir al catálogo
+                    </a>
+                    <a href="/logout" class="btn-outline-custom">Cerrar sesión</a>
                 </div>
             </div>
 
-            <div class="hero-card__right">
+            <div class="hero-card__right admin-hero-side">
                 <img
                     src="{{ empresa_logo_url }}?ts={{ time }}"
                     alt="Logo empresa activa"
@@ -46,359 +48,333 @@
                 <div id="heroLogoFallback" class="hero-logo-fallback" style="display:none;">
                     {{ empresa_activa.slug[:2].upper() if empresa_activa.slug else 'EM' }}
                 </div>
+
+                <form method="post" action="/empresa/activar_panel" class="toolbar-form toolbar-form--hero">
+                    <div class="toolbar-form__group toolbar-form__group--compact">
+                        <label for="slug" class="field-label">Empresa activa</label>
+                        <select id="slug" name="slug" class="input-custom select-custom">
+                            {% for e in empresas %}
+                            <option value="{{ e.slug }}"
+                                {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>
+                                {{ e.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button class="btn-outline-custom w-100" type="submit">Cambiar empresa</button>
+                </form>
             </div>
         </div>
     </section>
     {% endif %}
 
-    <section class="toolbar-card">
-        <form method="post" action="/empresa/activar_panel" class="toolbar-form">
-            <div class="toolbar-form__group">
-                <label for="slug" class="field-label">Empresa activa</label>
-                <select id="slug" name="slug" class="input-custom select-custom">
-                    {% for e in empresas %}
-                    <option value="{{ e.slug }}"
-                        {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>
-                        {{ e.nombre }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
+    <section class="tabs-shell">
+        <nav class="admin-tabs" role="tablist" aria-label="Secciones del panel admin">
+            <button id="tab-empresa" class="admin-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-empresa" data-tab-target="empresa">Empresa</button>
+            <button id="tab-productos" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-productos" data-tab-target="productos">Productos</button>
+            <button id="tab-usuarios" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-usuarios" data-tab-target="usuarios">Usuarios</button>
+            <button id="tab-backup" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-backup" data-tab-target="backup">Backup</button>
+            <button id="tab-avanzado" class="admin-tab admin-tab--warning" type="button" role="tab" aria-selected="false" aria-controls="panel-avanzado" data-tab-target="avanzado">Avanzado</button>
+        </nav>
 
-            <div class="toolbar-actions">
-                <button class="btn-primary-custom" type="submit">Cambiar empresa</button>
-
+        <section id="panel-empresa" class="admin-tab-panel is-active" role="tabpanel" aria-labelledby="tab-empresa" data-tab-panel="empresa">
+            <div class="admin-grid">
                 {% if empresa_activa %}
-                <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-secondary-custom">
-                    Ir al catálogo
-                </a>
+                <section class="admin-card">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">✏️ Editar empresa activa</h2>
+                        <p class="card-subtitle-custom">Corregí nombre, WhatsApp y slug sin borrar la empresa.</p>
+                    </div>
+
+                    <form action="/empresa/editar_panel" method="post" class="stack-form">
+                        <input type="hidden" name="empresa_slug_actual" value="{{ empresa_activa.slug }}">
+
+                        <div>
+                            <label class="field-label">Nombre de la empresa</label>
+                            <input class="input-custom" type="text" name="nombre" value="{{ empresa_activa.nombre }}" required>
+                        </div>
+
+                        <div>
+                            <label class="field-label">WhatsApp</label>
+                            <input class="input-custom" type="text" name="whatsapp" value="{{ empresa_activa.whatsapp or '' }}">
+                        </div>
+
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="checkbox" id="editar_slug" name="editar_slug" value="1" onchange="toggleSlugEdit()">
+                            <label class="form-check-label" for="editar_slug">Quiero editar el slug (opcional y avanzado)</label>
+                        </div>
+
+                        <div id="slug_edit_block" style="display:none;">
+                            <label class="field-label">Nuevo slug (URL)</label>
+                            <input class="input-custom" type="text" name="nuevo_slug" value="{{ empresa_activa.slug }}" placeholder="mi-empresa">
+                        </div>
+
+                        <button type="submit" class="btn-primary-custom w-100">Guardar datos de empresa</button>
+                    </form>
+                </section>
+
+                <section class="admin-card">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">🖼️ Identidad visual</h2>
+                        <p class="card-subtitle-custom">Actualizá logo y banner de {{ empresa_activa.nombre }}.</p>
+                    </div>
+
+                    <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data" class="stack-form">
+                        <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+
+                        <div class="preview-block preview-block--compact">
+                            <label class="field-label">Logo</label>
+                            <input class="input-file-custom" type="file" name="logo" accept="image/*">
+
+                            <div class="image-preview image-preview--logo compact-preview">
+                                <img
+                                    src="{{ empresa_logo_url }}?ts={{ time }}"
+                                    alt="Preview logo"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                >
+                                <div class="empty-preview" style="display:none;">Sin logo cargado</div>
+                            </div>
+                        </div>
+
+                        <div class="preview-block preview-block--compact">
+                            <label class="field-label">Banner</label>
+                            <input class="input-file-custom" type="file" name="banner" accept="image/*">
+
+                            <div class="image-preview image-preview--banner compact-preview">
+                                <img
+                                    src="{{ empresa_banner_url }}?ts={{ time }}"
+                                    alt="Preview banner"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                                >
+                                <div class="empty-preview" style="display:none;">Sin banner cargado</div>
+                            </div>
+                        </div>
+
+                        <button class="btn-secondary-custom w-100" type="submit">Guardar identidad visual</button>
+                    </form>
+                </section>
                 {% endif %}
-                <a href="/logout" class="btn-outline-custom">Cerrar sesión</a>
+
+                <section class="admin-card admin-card--wide">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">🏢 Crear empresa</h2>
+                        <p class="card-subtitle-custom">Alta de nueva empresa con identidad visual opcional.</p>
+                    </div>
+
+                    <form action="/empresa/crear_panel" method="post" enctype="multipart/form-data" class="stack-form">
+                        <div class="form-grid">
+                            <div>
+                                <label class="field-label">Nombre de la empresa</label>
+                                <input class="input-custom" type="text" name="nombre" placeholder="Automotores Pepe" required>
+                            </div>
+
+                            <div>
+                                <label class="field-label">Slug (URL)</label>
+                                <input class="input-custom" type="text" name="slug" placeholder="automotores-pepe" required>
+                            </div>
+
+                            <div class="full-width">
+                                <label class="field-label">WhatsApp</label>
+                                <input class="input-custom" type="text" name="whatsapp" placeholder="5493510000000">
+                            </div>
+
+                            <div>
+                                <label class="field-label">Logo (PNG / JPG)</label>
+                                <input class="input-file-custom" type="file" name="logo" accept="image/*">
+                            </div>
+
+                            <div>
+                                <label class="field-label">Banner (horizontal)</label>
+                                <input class="input-file-custom" type="file" name="banner" accept="image/*">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary-custom w-100">Crear empresa</button>
+                    </form>
+                </section>
             </div>
-        </form>
+        </section>
+
+        <section id="panel-productos" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-productos" data-tab-panel="productos" hidden>
+            <div class="admin-grid">
+                <section class="admin-card admin-card--wide">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">📦 Carga de productos</h2>
+                        <p class="card-subtitle-custom">Primero subí el Excel y después el ZIP con imágenes.</p>
+                    </div>
+
+                    <div class="tutorial-box">
+                        <div class="tutorial-icon">📘</div>
+                        <div class="tutorial-text">
+                            ¿Primera vez usando el panel?
+                            <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing" target="_blank" class="tutorial-link">
+                                Bajá la guía completa de uso
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="steps-grid">
+                        <div class="step-card">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h3>Subir Excel de productos</h3>
+                                <p>Columnas mínimas: código, descripción y precio. Opcionales: categoría, marca y stock.</p>
+
+                                <form action="/upload_excel" method="post" enctype="multipart/form-data" class="stack-form">
+                                    <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                                    <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
+                                    <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
+                                </form>
+
+                                {% if empresa_activa %}
+                                <a href="/admin/productos?empresa={{ empresa_activa.slug }}" class="btn-outline-custom w-100 mt-3 d-inline-block text-center">
+                                    Ver / editar productos importados
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="step-card">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h3>Subir ZIP de imágenes</h3>
+                                <p>Las imágenes deben llamarse igual que el código del producto. Ejemplo: VR-150.jpg</p>
+
+                                <form action="/upload_zip" method="post" enctype="multipart/form-data" class="stack-form">
+                                    <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                                    <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                                    <button class="btn-secondary-custom w-100" type="submit">Subir ZIP de imágenes</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if empresa_activa %}
+                    <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-outline-custom w-100 mt-3">Acceder al catálogo público</a>
+                    {% endif %}
+                </section>
+
+                {% if msg or error %}
+                <section class="admin-card admin-card--wide">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">🔔 Resultado de operaciones</h2>
+                        <p class="card-subtitle-custom">Mensajes recientes relacionados con productos y cargas.</p>
+                    </div>
+
+                    {% if msg %}
+                    <div class="alert alert-custom-success mt-2">{{ msg }}</div>
+                    {% endif %}
+                    {% if error %}
+                    <div class="alert alert-custom-error mt-2">{{ error }}</div>
+                    {% endif %}
+                </section>
+                {% endif %}
+            </div>
+        </section>
+
+        <section id="panel-usuarios" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-usuarios" data-tab-panel="usuarios" hidden>
+            <div class="admin-grid">
+                <section class="admin-card admin-card--wide">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">👤 Usuarios y accesos</h2>
+                        <p class="card-subtitle-custom">Creá usuarios admin o cliente y asignales su empresa.</p>
+                    </div>
+                    <form action="/admin/usuarios/crear" method="post" class="stack-form">
+                        <div class="form-grid">
+                            <div>
+                                <label class="field-label">Usuario</label>
+                                <input class="input-custom" type="text" name="username" required>
+                            </div>
+                            <div>
+                                <label class="field-label">Contraseña (mín. 6)</label>
+                                <input class="input-custom" type="password" name="password" minlength="6" required>
+                            </div>
+                            <div>
+                                <label class="field-label">Rol</label>
+                                <select name="rol" class="input-custom select-custom">
+                                    <option value="cliente" selected>cliente</option>
+                                    <option value="admin">admin</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="field-label">Empresa para cliente</label>
+                                <select name="empresa_slug" class="input-custom select-custom">
+                                    {% for e in empresas %}
+                                    <option value="{{ e.slug }}" {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>{{ e.nombre }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary-custom w-100">Crear usuario</button>
+                    </form>
+                </section>
+            </div>
+        </section>
+
+        <section id="panel-backup" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-backup" data-tab-panel="backup" hidden>
+            <div class="admin-grid">
+                <section class="admin-card admin-card--wide">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">🧳 Backup / Restore empresa completa</h2>
+                        <p class="card-subtitle-custom">Exportá e importá datos, productos y assets en un ZIP.</p>
+                    </div>
+
+                    <div class="steps-grid">
+                        <div class="step-card">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h3>Exportar empresa activa</h3>
+                                <p>Genera un ZIP con metadatos de empresa, productos e imágenes.</p>
+                                {% if empresa_activa %}
+                                <a class="btn-primary-custom w-100 d-inline-block text-center" href="/admin/empresa/exportar?empresa={{ empresa_activa.slug }}">
+                                    Descargar ZIP completo
+                                </a>
+                                {% else %}
+                                <p class="text-warning">No hay empresa activa para exportar.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="step-card">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h3>Importar ZIP completo</h3>
+                                <p>Modo <b>duplicate</b>: crea nueva empresa si el slug existe. Modo <b>replace</b>: sobrescribe la empresa existente.</p>
+                                <form action="/admin/empresa/importar" method="post" enctype="multipart/form-data" class="stack-form">
+                                    <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                                    <input class="input-file-custom" type="file" name="file" accept=".zip" required>
+                                    <select class="input-custom select-custom" name="import_mode">
+                                        <option value="duplicate" selected>duplicate (seguro)</option>
+                                        <option value="replace">replace (sobrescribir)</option>
+                                    </select>
+                                    <button class="btn-secondary-custom w-100" type="submit">Importar ZIP completo</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <section id="panel-avanzado" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-avanzado" data-tab-panel="avanzado" hidden>
+            <div class="admin-grid">
+                <section class="admin-card admin-card--danger admin-card--wide danger-zone-card">
+                    <div class="danger-zone-header">
+                        <h2 class="card-title-custom">⚠️ Zona peligrosa</h2>
+                        <p class="card-subtitle-custom">Acciones destructivas. Usar solo para mantenimiento excepcional.</p>
+                    </div>
+
+                    <div class="danger-row__content">
+                        <p class="danger-note">Esta acción elimina todos los productos de la empresa activa y no se puede deshacer.</p>
+                        <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()" class="danger-form">
+                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
+                            <button class="btn-danger-soft" type="submit">Borrar TODOS los productos</button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </section>
     </section>
-
-    <div class="admin-grid">
-        <section class="admin-card admin-card--wide section-header-card">
-            <h2 class="section-header-title">Gestión de empresa</h2>
-            <p class="section-header-subtitle">Administración completa de empresas y su configuración.</p>
-        </section>
-
-        {% if empresa_activa %}
-        <section class="admin-card">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">🖼️ Identidad visual</h2>
-                <p class="card-subtitle-custom">
-                    Actualizá el logo y el banner de {{ empresa_activa.nombre }}.
-                </p>
-            </div>
-
-            <form method="post" action="/empresa/actualizar_imagenes" enctype="multipart/form-data" class="stack-form">
-                <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
-
-                <div class="preview-block">
-                    <label class="field-label">Logo</label>
-                    <input class="input-file-custom" type="file" name="logo" accept="image/*">
-
-                    <div class="image-preview image-preview--logo">
-                        <img
-                            src="{{ empresa_logo_url }}?ts={{ time }}"
-                            alt="Preview logo"
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                        >
-                        <div class="empty-preview" style="display:none;">Sin logo cargado</div>
-                    </div>
-                </div>
-
-                <div class="preview-block">
-                    <label class="field-label">Banner</label>
-                    <input class="input-file-custom" type="file" name="banner" accept="image/*">
-
-                    <div class="image-preview image-preview--banner">
-                        <img
-                            src="{{ empresa_banner_url }}?ts={{ time }}"
-                            alt="Preview banner"
-                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                        >
-                        <div class="empty-preview" style="display:none;">Sin banner cargado</div>
-                    </div>
-                </div>
-
-                <button class="btn-primary-custom w-100" type="submit">
-                    Guardar cambios
-                </button>
-            </form>
-        </section>
-
-        <section class="admin-card">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">✏️ Editar empresa activa</h2>
-                <p class="card-subtitle-custom">
-                    Corregí nombre y WhatsApp sin borrar la empresa.
-                </p>
-            </div>
-
-            <form action="/empresa/editar_panel" method="post" class="stack-form">
-                <input type="hidden" name="empresa_slug_actual" value="{{ empresa_activa.slug }}">
-
-                <div>
-                    <label class="field-label">Nombre de la empresa</label>
-                    <input class="input-custom" type="text" name="nombre" value="{{ empresa_activa.nombre }}" required>
-                </div>
-
-                <div>
-                    <label class="field-label">WhatsApp</label>
-                    <input class="input-custom" type="text" name="whatsapp" value="{{ empresa_activa.whatsapp or '' }}">
-                </div>
-
-                <div class="form-check mt-1">
-                    <input class="form-check-input" type="checkbox" id="editar_slug" name="editar_slug" value="1" onchange="toggleSlugEdit()">
-                    <label class="form-check-label" for="editar_slug">
-                        Quiero editar el slug (opcional y avanzado)
-                    </label>
-                </div>
-
-                <div id="slug_edit_block" style="display:none;">
-                    <label class="field-label">Nuevo slug (URL)</label>
-                    <input class="input-custom" type="text" name="nuevo_slug" value="{{ empresa_activa.slug }}" placeholder="mi-empresa">
-                </div>
-
-                <button type="submit" class="btn-primary-custom w-100">
-                    Guardar datos de empresa
-                </button>
-            </form>
-        </section>
-
-        <section class="admin-card admin-card--wide section-header-card">
-            <h2 class="section-header-title">Productos</h2>
-            <p class="section-header-subtitle">Carga masiva, imágenes y edición del catálogo de la empresa activa.</p>
-        </section>
-        {% endif %}
-
-        <section class="admin-card">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">🏢 Crear empresa</h2>
-                <p class="card-subtitle-custom">
-                    Dala de alta con su nombre, slug, WhatsApp e identidad visual.
-                </p>
-            </div>
-
-            <form action="/empresa/crear_panel" method="post" enctype="multipart/form-data" class="stack-form">
-                <div class="form-grid">
-                    <div>
-                        <label class="field-label">Nombre de la empresa</label>
-                        <input class="input-custom" type="text" name="nombre" placeholder="Automotores Pepe" required>
-                    </div>
-
-                    <div>
-                        <label class="field-label">Slug (URL)</label>
-                        <input class="input-custom" type="text" name="slug" placeholder="automotores-pepe" required>
-                    </div>
-
-                    <div class="full-width">
-                        <label class="field-label">WhatsApp</label>
-                        <input class="input-custom" type="text" name="whatsapp" placeholder="5493510000000">
-                    </div>
-
-                    <div>
-                        <label class="field-label">Logo (PNG / JPG)</label>
-                        <input class="input-file-custom" type="file" name="logo" accept="image/*">
-                    </div>
-
-                    <div>
-                        <label class="field-label">Banner (horizontal)</label>
-                        <input class="input-file-custom" type="file" name="banner" accept="image/*">
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-primary-custom w-100">
-                    Crear empresa
-                </button>
-            </form>
-        </section>
-
-        <section class="admin-card">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">👤 Usuarios y accesos</h2>
-                <p class="card-subtitle-custom">
-                    Creá accesos admin o cliente (cliente ligado a una sola empresa).
-                </p>
-            </div>
-            <form action="/admin/usuarios/crear" method="post" class="stack-form">
-                <div>
-                    <label class="field-label">Usuario</label>
-                    <input class="input-custom" type="text" name="username" required>
-                </div>
-                <div>
-                    <label class="field-label">Contraseña (mín. 6)</label>
-                    <input class="input-custom" type="password" name="password" minlength="6" required>
-                </div>
-                <div>
-                    <label class="field-label">Rol</label>
-                    <select name="rol" class="input-custom select-custom">
-                        <option value="cliente" selected>cliente</option>
-                        <option value="admin">admin</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="field-label">Empresa para cliente</label>
-                    <select name="empresa_slug" class="input-custom select-custom">
-                        {% for e in empresas %}
-                        <option value="{{ e.slug }}" {% if empresa_activa and e.id == empresa_activa.id %}selected{% endif %}>{{ e.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="btn-secondary-custom w-100">Crear usuario</button>
-            </form>
-        </section>
-
-        <section class="admin-card admin-card--wide">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">📦 Carga de productos</h2>
-                <p class="card-subtitle-custom">
-                    Primero subí el Excel y después el ZIP con las imágenes.
-                </p>
-            </div>
-
-            <div class="tutorial-box">
-                <div class="tutorial-icon">📘</div>
-                <div class="tutorial-text">
-                    ¿Primera vez usando el panel?
-                    <a href="https://drive.google.com/file/d/1lYO1NJTyVbplvq1L7_Q05bT9sthZ5KhH/view?usp=sharing"
-                       target="_blank"
-                       class="tutorial-link">
-                        Bajá la guía completa de uso
-                    </a>
-                </div>
-            </div>
-
-            <div class="steps-grid">
-                <div class="step-card">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h3>Subir Excel de productos</h3>
-                        <p>Columnas mínimas: código, descripción y precio. Opcionales: categoría, marca y stock.</p>
-
-                        <form action="/upload_excel" method="post" enctype="multipart/form-data" class="stack-form">
-                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
-                            <input class="input-file-custom" type="file" name="file" accept=".xlsx" required>
-                            <button class="btn-primary-custom w-100" type="submit">Subir Excel</button>
-                        </form>
-
-                        {% if empresa_activa %}
-                        <a href="/admin/productos?empresa={{ empresa_activa.slug }}" class="btn-outline-custom w-100 mt-3 d-inline-block text-center">
-                            Ver / editar productos importados
-                        </a>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="step-card">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h3>Subir ZIP de imágenes</h3>
-                        <p>Las imágenes deben llamarse igual que el código del producto. Ejemplo: VR-150.jpg</p>
-
-                        <form action="/upload_zip" method="post" enctype="multipart/form-data" class="stack-form">
-                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
-                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
-                            <button class="btn-secondary-custom w-100" type="submit">Subir ZIP de imágenes</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            {% if empresa_activa %}
-            <a href="/catalogo/{{ empresa_activa.slug }}" target="_blank" class="btn-outline-custom w-100 mt-3">
-                Ver catálogo completo 🚗
-            </a>
-            {% endif %}
-        </section>
-
-        <section class="admin-card admin-card--wide section-header-card">
-            <h2 class="section-header-title">Herramientas avanzadas</h2>
-            <p class="section-header-subtitle">Backups, restore y acciones globales de mantenimiento.</p>
-        </section>
-
-        <section class="admin-card admin-card--wide">
-            <div class="card-header-custom">
-                <h2 class="card-title-custom">🧳 Backup / Restore empresa completa</h2>
-                <p class="card-subtitle-custom">
-                    Exportá e importá una empresa completa (datos, productos y assets) en un único ZIP.
-                </p>
-            </div>
-
-            <div class="steps-grid">
-                <div class="step-card">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h3>Exportar empresa activa</h3>
-                        <p>Genera un ZIP con metadatos de empresa, productos e imágenes.</p>
-                        {% if empresa_activa %}
-                        <a class="btn-primary-custom w-100 d-inline-block text-center"
-                           href="/admin/empresa/exportar?empresa={{ empresa_activa.slug }}">
-                            Descargar ZIP completo
-                        </a>
-                        {% else %}
-                        <p class="text-warning">No hay empresa activa para exportar.</p>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="step-card">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h3>Importar ZIP completo</h3>
-                        <p>
-                            Modo <b>duplicate</b> (por defecto): crea nueva empresa si el slug existe.
-                            Modo <b>replace</b>: pisa la empresa existente.
-                        </p>
-                        <form action="/admin/empresa/importar" method="post" enctype="multipart/form-data" class="stack-form">
-                            <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
-                            <input class="input-file-custom" type="file" name="file" accept=".zip" required>
-                            <select class="input-custom select-custom" name="import_mode">
-                                <option value="duplicate" selected>duplicate (seguro)</option>
-                                <option value="replace">replace (sobrescribir)</option>
-                            </select>
-                            <button class="btn-secondary-custom w-100" type="submit">Importar ZIP completo</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="admin-card admin-card--danger admin-card--wide danger-row">
-            <div class="danger-row__content">
-                <div>
-                    <h2 class="card-title-custom">⚠️ Zona peligrosa</h2>
-                    <p class="card-subtitle-custom">
-                        Esta acción elimina todos los productos de la empresa activa.
-                    </p>
-                </div>
-
-                <form action="/delete_all_products" method="post" onsubmit="return confirmarBorrado()" class="danger-form">
-                    <input type="hidden" name="empresa_slug" value="{{ empresa_query }}">
-                    <button class="btn-danger-soft" type="submit">
-                        Borrar TODOS los productos
-                    </button>
-                </form>
-            </div>
-        </section>
-    </div>
-
-    <div class="alerts-wrapper">
-        {% if msg %}
-        <div class="alert alert-custom-success mt-2">
-            {{ msg }}
-        </div>
-        {% endif %}
-
-        {% if error %}
-        <div class="alert alert-custom-error mt-2">
-            {{ error }}
-        </div>
-        {% endif %}
-    </div>
 </div>
 
 <script>
@@ -412,6 +388,44 @@ function toggleSlugEdit() {
     if (!check || !block) return;
     block.style.display = check.checked ? "block" : "none";
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+    const tabs = Array.from(document.querySelectorAll('[data-tab-target]'));
+    const panels = Array.from(document.querySelectorAll('[data-tab-panel]'));
+    if (!tabs.length || !panels.length) return;
+
+    function activateTab(name, updateHash = true) {
+        tabs.forEach((tab) => {
+            const isActive = tab.dataset.tabTarget === name;
+            tab.classList.toggle('is-active', isActive);
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            tab.tabIndex = isActive ? 0 : -1;
+        });
+
+        panels.forEach((panel) => {
+            const isActive = panel.dataset.tabPanel === name;
+            panel.classList.toggle('is-active', isActive);
+            panel.hidden = !isActive;
+        });
+
+        if (updateHash) {
+            history.replaceState(null, '', '#' + name);
+        }
+    }
+
+    tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tabTarget;
+            if (!tabName) return;
+            activateTab(tabName);
+        });
+    });
+
+    const hashTab = window.location.hash ? window.location.hash.slice(1) : '';
+    const defaultTab = tabs[0].dataset.tabTarget;
+    const hasHashTab = tabs.some((tab) => tab.dataset.tabTarget === hashTab);
+    activateTab(hasHashTab ? hashTab : defaultTab, false);
+});
 </script>
 
 </body>
