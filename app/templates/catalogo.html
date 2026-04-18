@@ -618,24 +618,15 @@
                     <div class="product-code">{{ p.codigo }}</div>
                     <p class="product-desc mb-2">{{ p.descripcion }}</p>
 
-                    <div class="product-price mb-1">
-                        ${{ '{:,.2f}'.format(p.precio) }}
+                    <div class="product-price mb-1 {% if not p.catalog_price_numeric %}text-info{% endif %}">
+                        {{ p.catalog_price_text }}
                     </div>
 
+                    {% if p.catalog_stock_visible %}
                     <div class="stock-card">
-                        {% if p.stock == 0 %}
-                            <span class="stock-pill stock-gray">Sin stock</span>
-
-                        {% elif p.stock <= 15 %}
-                            <span class="stock-pill stock-red">Stock bajo</span>
-
-                        {% elif p.stock <= 60 %}
-                            <span class="stock-pill stock-yellow">Stock medio</span>
-
-                        {% else %}
-                            <span class="stock-pill stock-green">Stock alto</span>
-                        {% endif %}
+                        <span class="stock-pill {{ p.catalog_stock_class }}">{{ p.catalog_stock_text }}</span>
                     </div>
+                    {% endif %}
 
                 </div>
 
@@ -702,7 +693,7 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
                 <div class="total-label">Total estimado</div>
-                <div class="total-value">$<span id="total-pedido">0</span></div>
+                <div class="total-value"><span id="total-pedido">0.00</span></div>
             </div>
         </div>
 
@@ -752,9 +743,9 @@
 
                 <p><strong>Marca:</strong> <span id="modalMarca"></span></p>
                 <p><strong>Categoría:</strong> <span id="modalCategoria"></span></p>
-                <p><strong>Stock:</strong> <span id="modalStock" class="stock-pill stock-gray"></span></p>
+                <p id="modalStockRow"><strong>Stock:</strong> <span id="modalStock" class="stock-pill stock-gray"></span></p>
 
-                <h4 class="text-success fw-bold">$<span id="modalPrecio"></span></h4>
+                <h4 class="fw-bold" id="modalPrecioWrap"><span id="modalPrecio"></span></h4>
 
             </div>
 
@@ -979,7 +970,10 @@ function abrirModal(id) {
     document.getElementById("modalDescripcion").innerText = p.descripcion;
     document.getElementById("modalMarca").innerText = p.marca || "—";
     document.getElementById("modalCategoria").innerText = p.categoria || "—";
-    document.getElementById("modalPrecio").innerText = p.precio;
+    const modalPrecioEl = document.getElementById("modalPrecio");
+    const modalPrecioWrap = document.getElementById("modalPrecioWrap");
+    modalPrecioEl.innerText = p.precio_mostrable ? `$${Number(p.precio || 0).toFixed(2)}` : (p.precio_texto || "Consultar");
+    modalPrecioWrap.className = p.precio_mostrable ? "fw-bold text-success" : "fw-bold text-info";
 
     document.getElementById("modalMarcaBadge").innerText = p.marca || "Sin marca";
     document.getElementById("modalCategoriaBadge").innerText = p.categoria || "Sin categoría";
@@ -991,29 +985,17 @@ function abrirModal(id) {
 
     // SEMÁFORO DE STOCK EN MODAL
     const stockEl = document.getElementById("modalStock");
-    let stockNum = parseInt(p.stock || 0, 10);
-    let clase = "stock-pill ";
-    let texto = "";
-
-    if (isNaN(stockNum) || stockNum <= 0) {
-        clase += "stock-gray";
-        texto = "Sin stock";
-    } else if (stockNum < 5) {
-        clase += "stock-red";
-        texto = "Pocas unidades";
-    } else if (stockNum <= 20) {
-        clase += "stock-yellow";
-        texto = "Stock normal";
+    const stockRowEl = document.getElementById("modalStockRow");
+    if (p.stock_visible) {
+        stockRowEl.style.display = "";
+        stockEl.className = `stock-pill ${p.stock_clase || "stock-gray"}`;
+        stockEl.innerText = p.stock_texto || "Sin stock";
     } else {
-        clase += "stock-green";
-        texto = "Mucho stock";
+        stockRowEl.style.display = "none";
     }
 
-    stockEl.className = clase;
-    stockEl.innerText = texto;
-
     document.getElementById("btnAgregar").onclick = function() {
-        agregarPedido(p.codigo, p.descripcion, p.precio);
+        agregarPedido(p);
         modal.hide();
         offcanvasCarrito.show();
     };
@@ -1021,12 +1003,19 @@ function abrirModal(id) {
     modal.show();
 }
 /* ---------- PEDIDO / CARRITO ---------- */
-function agregarPedido(codigo, descripcion, precio) {
-    let item = pedido.find(x => x.codigo === codigo);
+function agregarPedido(producto) {
+    let item = pedido.find(x => x.codigo === producto.codigo);
     if (item) {
         item.cantidad++;
     } else {
-        pedido.push({ codigo, descripcion, precio, cantidad: 1 });
+        pedido.push({
+            codigo: producto.codigo,
+            descripcion: producto.descripcion,
+            precio: Number(producto.precio || 0),
+            precio_mostrable: Boolean(producto.precio_mostrable),
+            precio_texto: producto.precio_texto || "Consultar",
+            cantidad: 1
+        });
     }
     renderPedido();
 }
@@ -1049,12 +1038,20 @@ function renderPedido() {
 
     lista.innerHTML = "";
     let total = 0;
+    let totalConsultable = false;
     let count = 0;
 
     pedido.forEach((item, i) => {
         const subtotal = item.precio * item.cantidad;
-        total += subtotal;
+        if (item.precio_mostrable) {
+            total += subtotal;
+        } else {
+            totalConsultable = true;
+        }
         count += item.cantidad;
+        const precioDetalle = item.precio_mostrable
+            ? `$${item.precio.toFixed(2)} × ${item.cantidad} = $${subtotal.toFixed(2)}`
+            : `${item.precio_texto} × ${item.cantidad}`;
 
         lista.innerHTML += `
             <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -1063,7 +1060,7 @@ function renderPedido() {
                         ${item.codigo} – ${item.descripcion}
                     </div>
                     <div class="item-subtotal">
-                        $${item.precio} × ${item.cantidad} = $${subtotal.toFixed(2)}
+                        ${precioDetalle}
                     </div>
                 </div>
 
@@ -1076,7 +1073,7 @@ function renderPedido() {
         `;
     });
 
-    totalEl.innerText = total.toFixed(2);
+    totalEl.innerText = totalConsultable ? "Consultar" : `$${total.toFixed(2)}`;
     countEl.innerText = count;
 }
 
@@ -1095,7 +1092,7 @@ function compraRapida() {
         return;
     }
     for (let i = 0; i < qty; i++) {
-        agregarPedido(p.codigo, p.descripcion, p.precio);
+        agregarPedido(p);
     }
     document.getElementById('quick-code').value = "";
 }
@@ -1123,14 +1120,22 @@ function enviarWhatsApp() {
         mensaje += `%0A*Detalle del pedido*%0A`;
 
         let total = 0;
+        let hayPrecioConsultar = false;
 
         pedido.forEach(item => {
-            const subtotal = item.precio * item.cantidad;
-            total += subtotal;
-            mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}%0A`;
+            if (item.precio_mostrable) {
+                const subtotal = item.precio * item.cantidad;
+                total += subtotal;
+                mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · $${item.precio.toFixed(2)} c/u · Subtotal: $${subtotal.toFixed(2)}%0A`;
+            } else {
+                hayPrecioConsultar = true;
+                mensaje += `• ${item.codigo} – ${item.descripcion}%0A   Cant: ${item.cantidad} · Precio: ${item.precio_texto}%0A`;
+            }
         });
 
-        mensaje += `%0ATOTAL ESTIMADO: $${total.toFixed(2)}%0A`;
+        mensaje += hayPrecioConsultar
+            ? `%0ATOTAL ESTIMADO: Consultar%0A`
+            : `%0ATOTAL ESTIMADO: $${total.toFixed(2)}%0A`;
 
         let numero = "{{ empresa.whatsapp if empresa else '5493510000000' }}";
         window.open("https://wa.me/" + numero + "?text=" + mensaje, "_blank");
@@ -1200,14 +1205,20 @@ function enviarEmail() {
         cuerpo += `\nDetalle del pedido\n`;
 
         let total = 0;
+        let hayPrecioConsultar = false;
 
         pedido.forEach(item => {
-            const subtotal = item.precio * item.cantidad;
-            total += subtotal;
-            cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · $${item.precio} c/u · Subtotal: $${subtotal.toFixed(2)}\n`;
+            if (item.precio_mostrable) {
+                const subtotal = item.precio * item.cantidad;
+                total += subtotal;
+                cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · $${item.precio.toFixed(2)} c/u · Subtotal: $${subtotal.toFixed(2)}\n`;
+            } else {
+                hayPrecioConsultar = true;
+                cuerpo += `• ${item.codigo} – ${item.descripcion}\n   Cant: ${item.cantidad} · Precio: ${item.precio_texto}\n`;
+            }
         });
 
-        cuerpo += `\nTOTAL: $${total.toFixed(2)}\n`;
+        cuerpo += hayPrecioConsultar ? `\nTOTAL: Consultar\n` : `\nTOTAL: $${total.toFixed(2)}\n`;
 
         const mailtoLink = "mailto:?subject=" + encodeURIComponent(asunto) +
                            "&body=" + encodeURIComponent(cuerpo);

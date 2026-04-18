@@ -12,6 +12,8 @@ class Empresa(Base):
     whatsapp = Column(String, nullable=True)
     logo_url = Column(String, nullable=True)
     banner_url = Column(String, nullable=True)
+    politica_precio_catalogo = Column(String, nullable=False, default="automatico")
+    politica_stock_catalogo = Column(String, nullable=False, default="mostrar")
 
     productos = relationship(
         "Producto",

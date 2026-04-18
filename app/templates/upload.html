@@ -153,6 +153,41 @@
                         <button class="btn-secondary-custom w-100" type="submit">Guardar identidad visual</button>
                     </form>
                 </section>
+
+                <section class="admin-card">
+                    <div class="card-header-custom">
+                        <h2 class="card-title-custom">🧭 Configuración de visualización del catálogo</h2>
+                        <p class="card-subtitle-custom">Definí cómo mostrar precio y stock para {{ empresa_activa.nombre }}.</p>
+                    </div>
+
+                    <form action="/empresa/politicas_catalogo" method="post" class="stack-form">
+                        <input type="hidden" name="empresa_slug" value="{{ empresa_activa.slug }}">
+
+                        <div>
+                            <label class="field-label">Política de precio</label>
+                            <select name="politica_precio_catalogo" class="input-custom select-custom">
+                                <option value="mostrar" {% if empresa_activa.politica_precio_catalogo == "mostrar" %}selected{% endif %}>Mostrar precio</option>
+                                <option value="consultar" {% if empresa_activa.politica_precio_catalogo == "consultar" %}selected{% endif %}>Mostrar "Consultar"</option>
+                                <option value="automatico" {% if empresa_activa.politica_precio_catalogo == "automatico" %}selected{% endif %}>Automático (precio o consultar)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="field-label">Política de stock</label>
+                            <select name="politica_stock_catalogo" class="input-custom select-custom">
+                                <option value="mostrar" {% if empresa_activa.politica_stock_catalogo == "mostrar" %}selected{% endif %}>Mostrar disponibilidad</option>
+                                <option value="ocultar" {% if empresa_activa.politica_stock_catalogo == "ocultar" %}selected{% endif %}>Ocultar stock</option>
+                                <option value="automatico" {% if empresa_activa.politica_stock_catalogo == "automatico" %}selected{% endif %}>Automático (solo con dato útil)</option>
+                            </select>
+                        </div>
+
+                        <div class="small text-secondary">
+                            Precio automático: muestra valor si existe, sino "Consultar". Stock automático: muestra solo cuando hay disponibilidad útil.
+                        </div>
+
+                        <button class="btn-primary-custom w-100" type="submit">Guardar configuración de visualización</button>
+                    </form>
+                </section>
                 {% endif %}
 
                 <section class="admin-card admin-card--wide">
