@@ -1,10 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, Depends, Request, Form, Query
+from fastapi import FastAPI, UploadFile, File, Depends, Request, Form, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
+from pydantic import BaseModel
 from typing import List
 import pandas as pd
 import zipfile
@@ -255,6 +256,103 @@ def can_access_empresa(user: models.Usuario, empresa_slug: str | None, db: Sessi
     if user.rol == "cliente" and user.empresa_id != empresa.id:
         return None
     return empresa
+
+
+LEAD_SESSION_KEY = "catalog_lead_sessions"
+EVENT_TYPES = {
+    "catalog_entered",
+    "search_performed",
+    "product_viewed",
+    "cart_item_added",
+    "whatsapp_clicked",
+    "pdf_downloaded",
+}
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+class CatalogEventPayload(BaseModel):
+    event_type: str
+    product_code: str | None = None
+    search_term: str | None = None
+    metadata: dict | None = None
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def get_lead_session_for_slug(request: Request, slug: str) -> dict | None:
+    sessions = request.session.get(LEAD_SESSION_KEY) or {}
+    lead_session = sessions.get(slug)
+    if isinstance(lead_session, dict):
+        return lead_session
+    return None
+
+
+def set_lead_session_for_slug(request: Request, slug: str, lead_id: int, session_token: str):
+    sessions = request.session.get(LEAD_SESSION_KEY) or {}
+    sessions[slug] = {"lead_id": lead_id, "session_token": session_token}
+    request.session[LEAD_SESSION_KEY] = sessions
+
+
+def clear_lead_session_for_slug(request: Request, slug: str):
+    sessions = request.session.get(LEAD_SESSION_KEY) or {}
+    if slug in sessions:
+        sessions.pop(slug, None)
+        request.session[LEAD_SESSION_KEY] = sessions
+
+
+def get_active_catalog_lead(request: Request, slug: str, empresa_id: int, db: Session) -> models.CatalogLead | None:
+    lead_session = get_lead_session_for_slug(request, slug)
+    if not lead_session:
+        return None
+
+    lead_id = lead_session.get("lead_id")
+    session_token = lead_session.get("session_token")
+    if not lead_id or not session_token:
+        clear_lead_session_for_slug(request, slug)
+        return None
+
+    lead = (
+        db.query(models.CatalogLead)
+        .filter(
+            models.CatalogLead.id == int(lead_id),
+            models.CatalogLead.empresa_catalogo_id == empresa_id,
+            models.CatalogLead.session_token == str(session_token),
+        )
+        .first()
+    )
+    if not lead:
+        clear_lead_session_for_slug(request, slug)
+        return None
+    return lead
+
+
+def register_catalog_event(
+    db: Session,
+    lead: models.CatalogLead,
+    empresa_id: int,
+    event_type: str,
+    product_code: str | None = None,
+    search_term: str | None = None,
+    metadata: dict | None = None,
+):
+    if event_type not in EVENT_TYPES:
+        return
+
+    event = models.CatalogLeadEvent(
+        lead_id=lead.id,
+        empresa_catalogo_id=empresa_id,
+        event_type=event_type,
+        product_code=clean_text(product_code, default="") or None,
+        search_term=clean_text(search_term, default="") or None,
+        metadata_json=json.dumps(metadata or {}, ensure_ascii=False) if metadata else None,
+        created_at=utc_now(),
+    )
+    lead.ultima_actividad = utc_now()
+    db.add(event)
+    db.add(lead)
+    db.commit()
 
 
 def clean_text(value, default=""):
@@ -1483,6 +1581,123 @@ def importar_empresa_completa(
 # ---------------------------------------------------
 # CATÁLOGO
 # ---------------------------------------------------
+@app.get("/catalogo/{slug}/acceso", response_class=HTMLResponse)
+def catalogo_acceso(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa:
+        return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
+
+    lead = get_active_catalog_lead(request, slug, empresa.id, db)
+    if lead:
+        return RedirectResponse(url=f"/catalogo/{slug}", status_code=303)
+
+    return templates.TemplateResponse(
+        "catalogo_acceso.html",
+        {
+            "request": request,
+            "empresa": empresa,
+            "empresa_logo_url": get_empresa_logo_url(empresa),
+        },
+    )
+
+
+@app.post("/catalogo/{slug}/acceso")
+def catalogo_acceso_submit(
+    slug: str,
+    request: Request,
+    nombre: str = Form(""),
+    empresa_nombre: str = Form(""),
+    email: str = Form(""),
+    telefono: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    empresa_obj = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa_obj:
+        return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
+
+    nombre_limpio = clean_text(nombre, default="")
+    empresa_limpia = clean_text(empresa_nombre, default="")
+    email_limpio = clean_text(email, default="").lower()
+    telefono_limpio = clean_text(telefono, default="") or None
+
+    error = None
+    if not nombre_limpio:
+        error = "Completá nombre y apellido."
+    elif not empresa_limpia:
+        error = "Completá empresa o comercio."
+    elif not email_limpio:
+        error = "Completá email."
+    elif not EMAIL_PATTERN.match(email_limpio):
+        error = "Ingresá un email válido."
+
+    if error:
+        return templates.TemplateResponse(
+            "catalogo_acceso.html",
+            {
+                "request": request,
+                "empresa": empresa_obj,
+                "empresa_logo_url": get_empresa_logo_url(empresa_obj),
+                "error": error,
+                "form_data": {
+                    "nombre": nombre_limpio,
+                    "empresa_nombre": empresa_limpia,
+                    "email": email_limpio,
+                    "telefono": telefono_limpio or "",
+                },
+            },
+            status_code=400,
+        )
+
+    lead = (
+        db.query(models.CatalogLead)
+        .filter(
+            models.CatalogLead.empresa_catalogo_id == empresa_obj.id,
+            models.CatalogLead.email == email_limpio,
+        )
+        .first()
+    )
+
+    new_token = secrets.token_urlsafe(32)
+    now = utc_now()
+    if not lead:
+        lead = models.CatalogLead(
+            empresa_catalogo_id=empresa_obj.id,
+            nombre=nombre_limpio,
+            empresa=empresa_limpia,
+            email=email_limpio,
+            telefono=telefono_limpio,
+            fecha_ingreso=now,
+            ultima_actividad=now,
+            session_token=new_token,
+        )
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+    else:
+        lead.nombre = nombre_limpio
+        lead.empresa = empresa_limpia
+        lead.telefono = telefono_limpio
+        lead.session_token = new_token
+        lead.ultima_actividad = now
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+
+    set_lead_session_for_slug(request, slug, lead.id, new_token)
+    register_catalog_event(
+        db=db,
+        lead=lead,
+        empresa_id=empresa_obj.id,
+        event_type="catalog_entered",
+        metadata={"source": "access_form"},
+    )
+    return RedirectResponse(url=f"/catalogo/{slug}", status_code=303)
+
+
 @app.get("/catalogo/{slug}", response_class=HTMLResponse)
 def catalogo(
     slug: str,
@@ -1498,6 +1713,9 @@ def catalogo(
     empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
     if not empresa:
         return HTMLResponse("<h1>Empresa no encontrada</h1>", status_code=404)
+    lead = get_active_catalog_lead(request, slug, empresa.id, db)
+    if not lead:
+        return RedirectResponse(url=f"/catalogo/{slug}/acceso", status_code=303)
 
     query_db = db.query(models.Producto).filter(
         models.Producto.empresa_id == empresa.id,
@@ -1658,12 +1876,49 @@ def catalogo(
             "app_build": APP_BUILD,
             "empresa_logo_url": get_empresa_logo_url(empresa),
             "empresa_banner_url": get_empresa_banner_url(empresa),
+            "lead_data": {
+                "nombre": lead.nombre,
+                "empresa": lead.empresa,
+                "email": lead.email,
+                "telefono": lead.telefono or "",
+            },
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+
+@app.post("/catalogo/{slug}/track")
+def track_catalog_event(
+    slug: str,
+    request: Request,
+    payload: CatalogEventPayload,
+    db: Session = Depends(get_db),
+):
+    empresa = db.query(models.Empresa).filter(models.Empresa.slug == slug).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    lead = get_active_catalog_lead(request, slug, empresa.id, db)
+    if not lead:
+        raise HTTPException(status_code=401, detail="Lead no identificado para esta sesión")
+
+    event_type = clean_text(payload.event_type, default="")
+    if event_type not in EVENT_TYPES:
+        raise HTTPException(status_code=400, detail="Tipo de evento inválido")
+
+    register_catalog_event(
+        db=db,
+        lead=lead,
+        empresa_id=empresa.id,
+        event_type=event_type,
+        product_code=payload.product_code,
+        search_term=payload.search_term,
+        metadata=payload.metadata or {},
+    )
+    return {"ok": True}
 
 
 @app.get("/catalogo/{slug}/lista_precio.json")

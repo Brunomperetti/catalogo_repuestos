@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso al catálogo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #0d1526 0%, #030712 55%, #000 100%);
+      display: grid;
+      place-items: center;
+      font-family: Inter, system-ui, sans-serif;
+      color: #e2e8f0;
+      padding: 16px;
+    }
+    .access-card {
+      width: min(100%, 520px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 16px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      padding: 24px;
+    }
+    .brand-logo {
+      max-height: 56px;
+      max-width: 160px;
+      object-fit: contain;
+      margin-bottom: 10px;
+    }
+    .legal-note {
+      font-size: 0.85rem;
+      color: #93c5fd;
+      line-height: 1.35;
+    }
+  </style>
+</head>
+<body>
+  <div class="access-card">
+    <div class="text-center mb-3">
+      {% if empresa_logo_url %}
+      <img src="{{ empresa_logo_url }}" alt="Logo" class="brand-logo" onerror="this.style.display='none'">
+      {% endif %}
+      <h1 class="h4 mb-1">Ingresá al catálogo</h1>
+      <p class="text-secondary mb-0">{{ empresa.nombre }}</p>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-danger py-2" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/catalogo/{{ empresa.slug }}/acceso" class="row g-3">
+      <div class="col-12">
+        <label for="nombre" class="form-label">Nombre y apellido *</label>
+        <input type="text" id="nombre" name="nombre" class="form-control" required value="{{ form_data.nombre if form_data else '' }}">
+      </div>
+
+      <div class="col-12">
+        <label for="empresa_nombre" class="form-label">Empresa / comercio *</label>
+        <input type="text" id="empresa_nombre" name="empresa_nombre" class="form-control" required value="{{ form_data.empresa_nombre if form_data else '' }}">
+      </div>
+
+      <div class="col-12">
+        <label for="email" class="form-label">Email *</label>
+        <input type="email" id="email" name="email" class="form-control" required value="{{ form_data.email if form_data else '' }}">
+      </div>
+
+      <div class="col-12">
+        <label for="telefono" class="form-label">Teléfono (opcional)</label>
+        <input type="text" id="telefono" name="telefono" class="form-control" value="{{ form_data.telefono if form_data else '' }}">
+      </div>
+
+      <div class="col-12">
+        <p class="legal-note mb-0">Tus datos pueden usarse para contacto comercial y para seguimiento de actividad dentro del catálogo.</p>
+      </div>
+
+      <div class="col-12 d-grid">
+        <button type="submit" class="btn btn-primary btn-lg">Entrar al catálogo</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
