@@ -329,6 +329,23 @@
                         <p class="card-subtitle-custom">Seguimiento comercial de contactos y actividad reciente en el catálogo de {{ empresa_activa.nombre if empresa_activa else 'la empresa activa' }}.</p>
                     </div>
 
+                    <div class="leads-kpi-head">
+                        <div>
+                            <h3 class="leads-kpi-title">Tablero comercial</h3>
+                            <p class="leads-kpi-subtitle">KPIs generales de la empresa activa (no archivados), para priorización diaria.</p>
+                        </div>
+                        <a class="btn-outline-custom btn-sm" href="/admin?empresa={{ empresa_query }}&tab=leads&lead_unmanaged=1">Ver sin gestionar</a>
+                    </div>
+                    <div class="leads-kpi-grid">
+                        {% for kpi in leads_kpis %}
+                        <a class="leads-kpi-card {% if lead_unmanaged and kpi.key == 'sin_gestionar' %}is-active{% endif %}" href="/admin?empresa={{ empresa_query }}&tab=leads&{{ kpi.query }}">
+                            <span class="leads-kpi-label">{{ kpi.label }}</span>
+                            <strong class="leads-kpi-value">{{ kpi.value }}</strong>
+                            <small class="leads-kpi-hint">{{ kpi.hint }}</small>
+                        </a>
+                        {% endfor %}
+                    </div>
+
                     <form method="get" action="/admin" class="leads-filter-form">
                         <input type="hidden" name="empresa" value="{{ empresa_query }}">
                         <input type="hidden" name="tab" value="leads">
@@ -390,6 +407,7 @@
                         <div class="leads-filter-actions">
                             <button class="btn-secondary-custom" type="submit">Aplicar filtros</button>
                             <a class="btn-outline-custom" href="/admin?empresa={{ empresa_query }}&tab=leads">Limpiar</a>
+                            <a class="btn-outline-custom {% if lead_unmanaged %}is-active{% endif %}" href="/admin?empresa={{ empresa_query }}&tab=leads&lead_unmanaged=1">Sin gestionar</a>
                         </div>
                     </form>
                 </section>
@@ -397,40 +415,67 @@
                 <section class="admin-card">
                     <div class="card-header-custom">
                         <h3 class="card-title-custom">Lista de leads</h3>
-                        <p class="card-subtitle-custom">{{ leads_rows|length }} lead(s) para seguimiento comercial, ordenados por actividad más reciente.</p>
+                        <p class="card-subtitle-custom">{{ leads_rows|length }} lead(s) ordenados por prioridad comercial automática (interés, estado, señales y actividad).</p>
                     </div>
 
                     {% if leads_rows %}
                     <div class="leads-list">
                         {% for item in leads_rows %}
                         {% set lead = item.lead %}
-                        <a class="lead-card-row {% if lead_selected and lead_selected.id == lead.id %}is-selected{% endif %}" href="/admin?empresa={{ empresa_query }}&tab=leads&lead_q={{ lead_q_url }}{% if lead_whatsapp is sameas true %}&lead_whatsapp=1{% endif %}{% if lead_pdf is sameas true %}&lead_pdf=1{% endif %}{% if lead_cart is sameas true %}&lead_cart=1{% endif %}{% if lead_status %}&lead_status={{ lead_status }}{% endif %}{% if lead_interest %}&lead_interest={{ lead_interest }}{% endif %}{% if lead_archived %}&lead_archived=1{% endif %}&lead_id={{ lead.id }}">
-                            <div class="lead-card-main">
-                                <div class="lead-card-title">
-                                    <strong>{{ lead.nombre }}</strong>
-                                    <small>{{ lead.empresa }}</small>
+                        <article class="lead-card-row priority-{{ item.priority.slug }} {% if lead_selected and lead_selected.id == lead.id %}is-selected{% endif %}">
+                            <a class="lead-card-main-link" href="/admin?empresa={{ empresa_query }}&tab=leads&lead_q={{ lead_q_url }}{% if lead_whatsapp is sameas true %}&lead_whatsapp=1{% endif %}{% if lead_pdf is sameas true %}&lead_pdf=1{% endif %}{% if lead_cart is sameas true %}&lead_cart=1{% endif %}{% if lead_status %}&lead_status={{ lead_status }}{% endif %}{% if lead_interest %}&lead_interest={{ lead_interest }}{% endif %}{% if lead_archived %}&lead_archived=1{% endif %}{% if lead_unmanaged %}&lead_unmanaged=1{% endif %}&lead_id={{ lead.id }}">
+                                <div class="lead-card-main">
+                                    <div class="lead-card-title">
+                                        <strong>{{ lead.nombre }}</strong>
+                                        <small>{{ lead.empresa }}</small>
+                                    </div>
+                                    <div class="lead-card-contact">
+                                        <span>{{ lead.email }}</span>
+                                        <span>{{ lead.telefono or 'Sin teléfono' }}</span>
+                                    </div>
                                 </div>
-                                <div class="lead-card-contact">
-                                    <span>{{ lead.email }}</span>
-                                    <span>{{ lead.telefono or 'Sin teléfono' }}</span>
+                                <div class="lead-card-dates">
+                                    <span>Ingreso: {{ lead.fecha_ingreso.strftime('%d/%m/%Y %H:%M') if lead.fecha_ingreso else '-' }}</span>
+                                    <span>Última actividad: <strong>{{ item.last_activity_human }}</strong></span>
                                 </div>
+                                <div class="lead-card-badges">
+                                    <span class="lead-badge priority-flag priority-{{ item.priority.slug }}">Prioridad {{ item.priority.label }}</span>
+                                    <span class="lead-badge interest-{{ item.interest.slug }}">{{ item.interest.label }}</span>
+                                    <span class="lead-badge status-{{ lead.estado or 'nuevo' }}">{{ lead_status_labels.get(lead.estado or 'nuevo', 'Nuevo') }}</span>
+                                    {% if item.is_recent %}<span class="lead-badge recent-lead">Nuevo reciente</span>{% endif %}
+                                    {% if item.has_notes %}<span class="lead-badge note-lead">Con nota</span>{% endif %}
+                                </div>
+                                <div class="lead-kpis-inline">
+                                    <span>Búsquedas: {{ item.search_count }}</span>
+                                    <span>Vistas: {{ item.product_view_count }}</span>
+                                    <span class="{{ 'lead-flag-on' if item.cart_add_count > 0 else 'lead-flag-off' }}">Pedido</span>
+                                    <span class="{{ 'lead-flag-on' if item.has_whatsapp_click else 'lead-flag-off' }}">WhatsApp</span>
+                                    <span class="{{ 'lead-flag-on' if item.has_pdf_download else 'lead-flag-off' }}">PDF</span>
+                                </div>
+                            </a>
+                            <div class="lead-row-actions">
+                                <form method="post" action="/admin/leads/{{ lead.id }}/quick-action">
+                                    <input type="hidden" name="empresa" value="{{ empresa_query }}">
+                                    <input type="hidden" name="action" value="contactado">
+                                    <button class="btn-outline-custom btn-sm" type="submit">Contactado</button>
+                                </form>
+                                <form method="post" action="/admin/leads/{{ lead.id }}/quick-action">
+                                    <input type="hidden" name="empresa" value="{{ empresa_query }}">
+                                    <input type="hidden" name="action" value="oportunidad">
+                                    <button class="btn-secondary-custom btn-sm" type="submit">Oportunidad</button>
+                                </form>
+                                <form method="post" action="/admin/leads/{{ lead.id }}/quick-action">
+                                    <input type="hidden" name="empresa" value="{{ empresa_query }}">
+                                    <input type="hidden" name="action" value="archivar">
+                                    <button class="btn-outline-custom btn-sm" type="submit">Archivar</button>
+                                </form>
+                                <button type="button" class="btn-outline-custom btn-sm lead-copy-btn" data-copy="{{ lead.email|e }}">Copiar email</button>
+                                {% if lead.telefono %}
+                                <button type="button" class="btn-outline-custom btn-sm lead-copy-btn" data-copy="{{ lead.telefono|e }}">Copiar tel</button>
+                                <a class="btn-secondary-custom btn-sm" target="_blank" href="https://wa.me/{{ lead.telefono|replace('+','')|replace(' ','') }}">WhatsApp</a>
+                                {% endif %}
                             </div>
-                            <div class="lead-card-dates">
-                                <span>Ingreso: {{ lead.fecha_ingreso.strftime('%d/%m/%Y %H:%M') if lead.fecha_ingreso else '-' }}</span>
-                                <span>Última actividad: {{ (item.last_event_at or lead.ultima_actividad).strftime('%d/%m/%Y %H:%M') if (item.last_event_at or lead.ultima_actividad) else '-' }}</span>
-                            </div>
-                            <div class="lead-card-badges">
-                                <span class="lead-badge interest-{{ item.interest.slug }}">{{ item.interest.label }}</span>
-                                <span class="lead-badge status-{{ lead.estado or 'nuevo' }}">{{ lead_status_labels.get(lead.estado or 'nuevo', 'Nuevo') }}</span>
-                            </div>
-                            <div class="lead-kpis-inline">
-                                <span>Búsquedas: {{ item.search_count }}</span>
-                                <span>Vistas: {{ item.product_view_count }}</span>
-                                <span class="{{ 'lead-flag-on' if item.cart_add_count > 0 else 'lead-flag-off' }}">Pedido</span>
-                                <span class="{{ 'lead-flag-on' if item.has_whatsapp_click else 'lead-flag-off' }}">WhatsApp</span>
-                                <span class="{{ 'lead-flag-on' if item.has_pdf_download else 'lead-flag-off' }}">PDF</span>
-                            </div>
-                        </a>
+                        </article>
                         {% endfor %}
                     </div>
                     {% else %}
@@ -691,14 +736,13 @@ function toggleSlugEdit() {
 async function copyLeadValue(value) {
     const text = (value || "").trim();
     if (!text) {
-        alert("No hay dato para copiar.");
-        return;
+        return false;
     }
     try {
         await navigator.clipboard.writeText(text);
-        alert("Dato copiado.");
+        return true;
     } catch (err) {
-        alert("No se pudo copiar automáticamente.");
+        return false;
     }
 }
 
@@ -743,6 +787,18 @@ async function copyLeadValue(value) {
         activateTab(getValidTabFromHash() || defaultTab);
     });
 })();
+
+document.addEventListener("click", async (event) => {
+    const button = event.target.closest(".lead-copy-btn");
+    if (!button) return;
+    const value = button.dataset.copy || "";
+    const original = button.textContent;
+    const copied = await copyLeadValue(value);
+    button.textContent = copied ? "Copiado" : "Error";
+    setTimeout(() => {
+        button.textContent = original;
+    }, 1100);
+});
 </script>
 
 </body>
