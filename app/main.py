@@ -56,6 +56,7 @@ def on_startup():
     Base.metadata.create_all(bind=engine)
     ensure_empresa_media_columns()
     ensure_usuario_columns()
+    ensure_catalog_lead_columns()
     ensure_default_admin_user()
     print("CODEX_SIGNATURE_2026_04_15")
     route_paths = sorted(
@@ -127,6 +128,34 @@ def ensure_usuario_columns():
             conn.execute(text("ALTER TABLE usuarios ADD COLUMN activo BOOLEAN DEFAULT TRUE"))
         if "empresa_id" not in columns:
             conn.execute(text("ALTER TABLE usuarios ADD COLUMN empresa_id INTEGER"))
+
+
+def ensure_catalog_lead_columns():
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "catalog_leads" not in tables:
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("catalog_leads")}
+    with engine.begin() as conn:
+        if "estado" not in columns:
+            conn.execute(text("ALTER TABLE catalog_leads ADD COLUMN estado VARCHAR DEFAULT 'nuevo'"))
+        if "notas_internas" not in columns:
+            conn.execute(text("ALTER TABLE catalog_leads ADD COLUMN notas_internas TEXT"))
+        if "archived_at" not in columns:
+            conn.execute(text("ALTER TABLE catalog_leads ADD COLUMN archived_at TIMESTAMP"))
+        if "deleted_at" not in columns:
+            conn.execute(text("ALTER TABLE catalog_leads ADD COLUMN deleted_at TIMESTAMP"))
+        conn.execute(
+            text(
+                "UPDATE catalog_leads "
+                "SET estado = 'nuevo' "
+                "WHERE estado IS NULL OR estado NOT IN ('nuevo','contactado','oportunidad','archivado')"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_catalog_leads_estado ON catalog_leads(estado)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_catalog_leads_archived_at ON catalog_leads(archived_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_catalog_leads_deleted_at ON catalog_leads(deleted_at)"))
 
 # ---------------------------------------------------
 # DB Dependency
@@ -275,6 +304,13 @@ EVENT_TYPE_LABELS = {
     "whatsapp_clicked": "Click en WhatsApp",
     "pdf_downloaded": "Descargó PDF",
 }
+LEAD_STATUS_VALUES = {"nuevo", "contactado", "oportunidad", "archivado"}
+LEAD_STATUS_LABELS = {
+    "nuevo": "Nuevo",
+    "contactado": "Contactado",
+    "oportunidad": "Oportunidad",
+    "archivado": "Archivado",
+}
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -372,6 +408,34 @@ def parse_bool_query_flag(value: str | None) -> bool | None:
     return None
 
 
+def normalize_lead_status(value: str | None) -> str:
+    status = clean_text(value, default="nuevo").lower()
+    return status if status in LEAD_STATUS_VALUES else "nuevo"
+
+
+def compute_lead_interest(
+    search_count: int,
+    product_view_count: int,
+    cart_add_count: int,
+    has_whatsapp_click: bool,
+    has_pdf_download: bool,
+) -> dict:
+    score = 1
+    score += min(int(search_count or 0), 8)
+    score += min(int(product_view_count or 0), 10)
+    score += min(int(cart_add_count or 0) * 4, 12)
+    if has_whatsapp_click:
+        score += 7
+    if has_pdf_download:
+        score += 5
+
+    if score >= 15:
+        return {"label": "Caliente", "slug": "caliente", "score": score}
+    if score >= 7:
+        return {"label": "Interesado", "slug": "interesado", "score": score}
+    return {"label": "Frío", "slug": "frio", "score": score}
+
+
 def build_lead_metrics_subquery(db: Session, empresa_id: int):
     return (
         db.query(
@@ -396,6 +460,9 @@ def list_catalog_leads_for_admin(
     whatsapp_filter: bool | None = None,
     pdf_filter: bool | None = None,
     cart_filter: bool | None = None,
+    status_filter: str = "",
+    interest_filter: str = "",
+    include_archived: bool = False,
 ):
     metrics_sq = build_lead_metrics_subquery(db, empresa_id)
     query = (
@@ -410,6 +477,7 @@ def list_catalog_leads_for_admin(
         )
         .outerjoin(metrics_sq, metrics_sq.c.lead_id == models.CatalogLead.id)
         .filter(models.CatalogLead.empresa_catalogo_id == empresa_id)
+        .filter(models.CatalogLead.deleted_at.is_(None))
     )
 
     q = clean_text(search_query, default="")
@@ -420,6 +488,7 @@ def list_catalog_leads_for_admin(
                 models.CatalogLead.nombre.ilike(pattern),
                 models.CatalogLead.empresa.ilike(pattern),
                 models.CatalogLead.email.ilike(pattern),
+                models.CatalogLead.telefono.ilike(pattern),
             )
         )
 
@@ -429,6 +498,12 @@ def list_catalog_leads_for_admin(
         query = query.filter(func.coalesce(metrics_sq.c.has_pdf_download, 0) > 0)
     if cart_filter is True:
         query = query.filter(func.coalesce(metrics_sq.c.cart_add_count, 0) > 0)
+
+    normalized_status_filter = normalize_lead_status(status_filter) if status_filter else ""
+    if normalized_status_filter:
+        query = query.filter(models.CatalogLead.estado == normalized_status_filter)
+    elif not include_archived:
+        query = query.filter(models.CatalogLead.estado != "archivado")
 
     rows = (
         query
@@ -449,6 +524,16 @@ def list_catalog_leads_for_admin(
         has_pdf_download,
         last_event_at,
     ) in rows:
+        interest = compute_lead_interest(
+            search_count=int(search_count or 0),
+            product_view_count=int(product_view_count or 0),
+            cart_add_count=int(cart_add_count or 0),
+            has_whatsapp_click=bool(has_whatsapp_click or 0),
+            has_pdf_download=bool(has_pdf_download or 0),
+        )
+        if interest_filter and interest["slug"] != clean_text(interest_filter, default="").lower():
+            continue
+
         lead_rows.append(
             {
                 "lead": lead,
@@ -458,6 +543,8 @@ def list_catalog_leads_for_admin(
                 "has_whatsapp_click": bool(has_whatsapp_click or 0),
                 "has_pdf_download": bool(has_pdf_download or 0),
                 "last_event_at": last_event_at,
+                "interest": interest,
+                "estado_label": LEAD_STATUS_LABELS.get(lead.estado or "nuevo", "Nuevo"),
             }
         )
     return lead_rows
@@ -482,6 +569,13 @@ def get_lead_summary_from_events(events: list[models.CatalogLeadEvent]) -> dict:
             summary["has_whatsapp_click"] = True
         elif event.event_type == "pdf_downloaded":
             summary["has_pdf_download"] = True
+    summary["interest"] = compute_lead_interest(
+        search_count=summary["search_count"],
+        product_view_count=summary["product_view_count"],
+        cart_add_count=summary["cart_add_count"],
+        has_whatsapp_click=summary["has_whatsapp_click"],
+        has_pdf_download=summary["has_pdf_download"],
+    )
     return summary
 
 
@@ -504,9 +598,32 @@ def build_lead_timeline_rows(events: list[models.CatalogLeadEvent]) -> list[dict
                 "search_term": event.search_term,
                 "product_code": event.product_code,
                 "metadata": metadata,
+                "metadata_summary": summarize_event_metadata(event.event_type, metadata),
             }
         )
     return rows
+
+
+def summarize_event_metadata(event_type: str, metadata: dict) -> str:
+    if not metadata:
+        return ""
+    if event_type == "search_performed":
+        term = clean_text(metadata.get("term"), default="")
+        if term:
+            return f"Término buscado: {term}"
+    if event_type == "product_viewed":
+        origin = clean_text(metadata.get("origin"), default="")
+        if origin:
+            return f"Origen de vista: {origin}"
+    if event_type == "cart_item_added":
+        quantity = clean_text(metadata.get("quantity"), default="")
+        if quantity:
+            return f"Cantidad agregada: {quantity}"
+    if event_type == "whatsapp_clicked":
+        target = clean_text(metadata.get("target"), default="")
+        if target:
+            return f"Canal: {target}"
+    return ""
 
 
 def clean_text(value, default=""):
@@ -1201,6 +1318,9 @@ def admin_panel(
     lead_whatsapp: str = "",
     lead_pdf: str = "",
     lead_cart: str = "",
+    lead_status: str = "",
+    lead_interest: str = "",
+    lead_archived: str = "",
     lead_id: int | None = None,
     db: Session = Depends(get_db)
 ):
@@ -1219,6 +1339,11 @@ def admin_panel(
     lead_whatsapp_filter = parse_bool_query_flag(lead_whatsapp)
     lead_pdf_filter = parse_bool_query_flag(lead_pdf)
     lead_cart_filter = parse_bool_query_flag(lead_cart)
+    lead_archived_filter = parse_bool_query_flag(lead_archived) is True
+    lead_status_filter = normalize_lead_status(lead_status) if clean_text(lead_status, default="") else ""
+    lead_interest_filter = clean_text(lead_interest, default="").lower()
+    if lead_interest_filter not in {"frio", "interesado", "caliente"}:
+        lead_interest_filter = ""
     leads_rows = []
     lead_selected = None
     lead_selected_summary = None
@@ -1232,6 +1357,9 @@ def admin_panel(
             whatsapp_filter=lead_whatsapp_filter,
             pdf_filter=lead_pdf_filter,
             cart_filter=lead_cart_filter,
+            status_filter=lead_status_filter,
+            interest_filter=lead_interest_filter,
+            include_archived=lead_archived_filter,
         )
 
         if lead_id:
@@ -1240,6 +1368,7 @@ def admin_panel(
                 .filter(
                     models.CatalogLead.id == lead_id,
                     models.CatalogLead.empresa_catalogo_id == empresa_activa.id,
+                    models.CatalogLead.deleted_at.is_(None),
                 )
                 .first()
             )
@@ -1281,9 +1410,13 @@ def admin_panel(
             "lead_whatsapp": lead_whatsapp_filter,
             "lead_pdf": lead_pdf_filter,
             "lead_cart": lead_cart_filter,
+            "lead_status": lead_status_filter,
+            "lead_interest": lead_interest_filter,
+            "lead_archived": lead_archived_filter,
             "lead_selected": lead_selected,
             "lead_selected_summary": lead_selected_summary,
             "lead_timeline": lead_timeline,
+            "lead_status_labels": LEAD_STATUS_LABELS,
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1329,6 +1462,136 @@ def cliente_panel(
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+
+
+@app.post("/admin/leads/{lead_id}/status")
+def admin_update_lead_status(
+    request: Request,
+    lead_id: int,
+    empresa: str = Form(""),
+    status: str = Form("nuevo"),
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    empresa_obj = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
+    if not empresa_obj:
+        return panel_redirect(error="No hay empresa activa", path="/admin")
+
+    lead = (
+        db.query(models.CatalogLead)
+        .filter(
+            models.CatalogLead.id == lead_id,
+            models.CatalogLead.empresa_catalogo_id == empresa_obj.id,
+            models.CatalogLead.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not lead:
+        return panel_redirect(empresa_slug=empresa_obj.slug, error="Lead no encontrado", path="/admin")
+
+    new_status = normalize_lead_status(status)
+    lead.estado = new_status
+    lead.archived_at = utc_now() if new_status == "archivado" else None
+    db.add(lead)
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin?empresa={quote(empresa_obj.slug)}&tab=leads&lead_id={lead_id}&msg={quote('Estado del lead actualizado')}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/leads/{lead_id}/notes")
+def admin_update_lead_notes(
+    request: Request,
+    lead_id: int,
+    empresa: str = Form(""),
+    notas: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    empresa_obj = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
+    if not empresa_obj:
+        return panel_redirect(error="No hay empresa activa", path="/admin")
+
+    lead = (
+        db.query(models.CatalogLead)
+        .filter(
+            models.CatalogLead.id == lead_id,
+            models.CatalogLead.empresa_catalogo_id == empresa_obj.id,
+            models.CatalogLead.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not lead:
+        return panel_redirect(empresa_slug=empresa_obj.slug, error="Lead no encontrado", path="/admin")
+
+    lead.notas_internas = clean_text(notas, default="")
+    db.add(lead)
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin?empresa={quote(empresa_obj.slug)}&tab=leads&lead_id={lead_id}&msg={quote('Notas internas guardadas')}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/leads/{lead_id}/archive")
+def admin_archive_lead(
+    request: Request,
+    lead_id: int,
+    empresa: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    return admin_update_lead_status(
+        request=request,
+        lead_id=lead_id,
+        empresa=empresa,
+        status="archivado",
+        db=db,
+    )
+
+
+@app.post("/admin/leads/{lead_id}/delete")
+def admin_delete_lead(
+    request: Request,
+    lead_id: int,
+    empresa: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    empresa_obj = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
+    if not empresa_obj:
+        return panel_redirect(error="No hay empresa activa", path="/admin")
+
+    lead = (
+        db.query(models.CatalogLead)
+        .filter(
+            models.CatalogLead.id == lead_id,
+            models.CatalogLead.empresa_catalogo_id == empresa_obj.id,
+            models.CatalogLead.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not lead:
+        return panel_redirect(empresa_slug=empresa_obj.slug, error="Lead no encontrado", path="/admin")
+
+    lead.deleted_at = utc_now()
+    lead.estado = "archivado"
+    lead.archived_at = lead.archived_at or utc_now()
+    db.add(lead)
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin?empresa={quote(empresa_obj.slug)}&tab=leads&msg={quote('Lead eliminado')}",
+        status_code=303,
+    )
 
 
 @app.get("/panel")
