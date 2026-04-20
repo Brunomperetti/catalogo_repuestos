@@ -823,6 +823,206 @@ img[src*="no-image"] {
     border-radius: 14px;
 }
 
+.leads-filter-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.leads-filter-grid {
+    display: grid;
+    grid-template-columns: 2fr repeat(3, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.leads-filter-search {
+    grid-column: span 1;
+}
+
+.leads-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.leads-table-wrap {
+    overflow-x: auto;
+}
+
+.leads-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 820px;
+}
+
+.leads-table thead th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #94a3b8;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.leads-table tbody td {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    padding: 12px;
+    vertical-align: top;
+    color: #e2e8f0;
+    font-size: .9rem;
+}
+
+.leads-table tbody tr:hover,
+.leads-table tbody tr.is-selected {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+.lead-row-link {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.lead-row-link small,
+.leads-table small {
+    color: #94a3b8;
+}
+
+.lead-kpis-inline {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lead-kpis-inline span {
+    font-size: .78rem;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    color: #cbd5e1;
+}
+
+.lead-flag-on {
+    border-color: rgba(74, 222, 128, 0.4) !important;
+    color: #bbf7d0 !important;
+}
+
+.lead-flag-off {
+    opacity: .68;
+}
+
+.lead-detail-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.lead-detail-head {
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    background: rgba(2, 6, 23, 0.45);
+    padding: 14px;
+}
+
+.lead-detail-head h4 {
+    margin: 0;
+    color: #f8fafc;
+    font-weight: 800;
+}
+
+.lead-detail-head p {
+    margin: 4px 0 10px;
+    color: #bae6fd;
+}
+
+.lead-contact-lines,
+.lead-date-lines {
+    display: grid;
+    gap: 4px;
+    color: #cbd5e1;
+    font-size: .88rem;
+}
+
+.lead-summary-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lead-summary-card {
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.lead-summary-card span {
+    font-size: .78rem;
+    color: #94a3b8;
+}
+
+.lead-summary-card strong {
+    font-size: 1.08rem;
+    color: #f8fafc;
+}
+
+.lead-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.lead-timeline-item {
+    background: rgba(2, 6, 23, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 14px;
+    padding: 12px;
+}
+
+.lead-timeline-item header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.lead-timeline-item strong {
+    color: #e2e8f0;
+}
+
+.lead-timeline-item time {
+    color: #94a3b8;
+    font-size: .82rem;
+}
+
+.lead-timeline-meta {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #cbd5e1;
+    font-size: .86rem;
+}
+
+.empty-state-custom {
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.25);
+    background: rgba(2, 6, 23, 0.36);
+    color: #94a3b8;
+    padding: 18px;
+    text-align: center;
+}
+
 /* =========================================================
    RESPONSIVE
 ========================================================= */
@@ -858,6 +1058,14 @@ img[src*="no-image"] {
 
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .leads-filter-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .lead-summary-grid {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -927,5 +1135,10 @@ img[src*="no-image"] {
     .input-file-custom::file-selector-button {
         margin-right: 8px;
         padding: 8px 10px;
+    }
+
+    .leads-filter-grid,
+    .lead-summary-grid {
+        grid-template-columns: 1fr;
     }
 }
