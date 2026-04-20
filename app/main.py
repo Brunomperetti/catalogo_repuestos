@@ -436,6 +436,96 @@ def compute_lead_interest(
     return {"label": "Frío", "slug": "frio", "score": score}
 
 
+def get_lead_priority(
+    *,
+    lead_status: str,
+    interest: dict,
+    last_activity_at: datetime | None,
+    created_at: datetime | None,
+    cart_add_count: int,
+    has_whatsapp_click: bool,
+    has_pdf_download: bool,
+    has_notes: bool,
+) -> dict:
+    status = normalize_lead_status(lead_status)
+    now = utc_now()
+    score = 0
+
+    status_weight = {
+        "nuevo": 20,
+        "contactado": 12,
+        "oportunidad": 24,
+        "archivado": -40,
+    }
+    interest_weight = {
+        "frio": 5,
+        "interesado": 14,
+        "caliente": 25,
+    }
+    score += status_weight.get(status, 0)
+    score += interest_weight.get(interest.get("slug", "frio"), 5)
+    score += min(int(cart_add_count or 0) * 5, 20)
+    score += 7 if has_whatsapp_click else 0
+    score += 4 if has_pdf_download else 0
+    score += 2 if has_notes else 0
+
+    reference_activity = last_activity_at or created_at
+    if reference_activity:
+        delta_hours = max((now - reference_activity).total_seconds() / 3600, 0)
+        if delta_hours <= 6:
+            score += 12
+        elif delta_hours <= 24:
+            score += 9
+        elif delta_hours <= 72:
+            score += 6
+        elif delta_hours <= 168:
+            score += 3
+        elif delta_hours > 720:
+            score -= 3
+
+    if created_at and max((now - created_at).total_seconds(), 0) <= 86400:
+        score += 3
+
+    if status == "archivado":
+        score = min(score, 0)
+
+    if status == "archivado":
+        label = "Archivado"
+        slug = "archivado"
+    elif score >= 52:
+        label = "Alta"
+        slug = "alta"
+    elif score >= 32:
+        label = "Media"
+        slug = "media"
+    else:
+        label = "Baja"
+        slug = "baja"
+    return {"score": score, "label": label, "slug": slug}
+
+
+def format_human_time_ago(dt: datetime | None) -> str:
+    if not dt:
+        return "-"
+    now = utc_now()
+    delta_seconds = int(max((now - dt).total_seconds(), 0))
+
+    if delta_seconds < 60:
+        return "Hace instantes"
+    if delta_seconds < 3600:
+        minutes = max(delta_seconds // 60, 1)
+        return f"Hace {minutes} min"
+    if delta_seconds < 86400:
+        hours = max(delta_seconds // 3600, 1)
+        return f"Hace {hours} h"
+    if delta_seconds < 172800:
+        return "Ayer"
+    if delta_seconds < 604800:
+        days = max(delta_seconds // 86400, 2)
+        return f"Hace {days} días"
+    return dt.strftime("%d/%m/%Y")
+
+
 def build_lead_metrics_subquery(db: Session, empresa_id: int):
     return (
         db.query(
@@ -507,10 +597,7 @@ def list_catalog_leads_for_admin(
 
     rows = (
         query
-        .order_by(
-            func.coalesce(metrics_sq.c.last_event_at, models.CatalogLead.ultima_actividad, models.CatalogLead.fecha_ingreso).desc(),
-            models.CatalogLead.id.desc(),
-        )
+        .order_by(models.CatalogLead.id.desc())
         .all()
     )
 
@@ -534,6 +621,19 @@ def list_catalog_leads_for_admin(
         if interest_filter and interest["slug"] != clean_text(interest_filter, default="").lower():
             continue
 
+        last_activity_at = last_event_at or lead.ultima_actividad or lead.fecha_ingreso
+        has_notes = bool(clean_text(lead.notas_internas, default=""))
+        priority = get_lead_priority(
+            lead_status=lead.estado or "nuevo",
+            interest=interest,
+            last_activity_at=last_activity_at,
+            created_at=lead.fecha_ingreso,
+            cart_add_count=int(cart_add_count or 0),
+            has_whatsapp_click=bool(has_whatsapp_click or 0),
+            has_pdf_download=bool(has_pdf_download or 0),
+            has_notes=has_notes,
+        )
+
         lead_rows.append(
             {
                 "lead": lead,
@@ -543,11 +643,73 @@ def list_catalog_leads_for_admin(
                 "has_whatsapp_click": bool(has_whatsapp_click or 0),
                 "has_pdf_download": bool(has_pdf_download or 0),
                 "last_event_at": last_event_at,
+                "last_activity_at": last_activity_at,
+                "last_activity_human": format_human_time_ago(last_activity_at),
                 "interest": interest,
                 "estado_label": LEAD_STATUS_LABELS.get(lead.estado or "nuevo", "Nuevo"),
+                "priority": priority,
+                "has_notes": has_notes,
+                "is_recent": bool(lead.fecha_ingreso and (utc_now() - lead.fecha_ingreso).total_seconds() <= 172800),
             }
         )
-    return lead_rows
+    return sorted(
+        lead_rows,
+        key=lambda item: (
+            1 if (item["lead"].estado or "nuevo") == "archivado" else 0,
+            -int(item["priority"]["score"]),
+            -(item["last_activity_at"].timestamp() if item["last_activity_at"] else 0),
+            -int(item["lead"].id),
+        ),
+    )
+
+
+def build_leads_kpis(rows: list[dict]) -> list[dict]:
+    active_rows = [row for row in rows if (row["lead"].estado or "nuevo") != "archivado"]
+    unmanaged = [row for row in active_rows if (row["lead"].estado or "nuevo") == "nuevo"]
+    return [
+        {
+            "key": "nuevos",
+            "label": "Leads nuevos",
+            "value": len(unmanaged),
+            "hint": "Estado Nuevo (no archivados)",
+            "query": "lead_status=nuevo",
+        },
+        {
+            "key": "calientes",
+            "label": "Leads calientes",
+            "value": sum(1 for row in active_rows if row["interest"]["slug"] == "caliente"),
+            "hint": "Interés comercial alto",
+            "query": "lead_interest=caliente",
+        },
+        {
+            "key": "pedido",
+            "label": "Con pedido",
+            "value": sum(1 for row in active_rows if row["cart_add_count"] > 0),
+            "hint": "Agregaron productos",
+            "query": "lead_cart=1",
+        },
+        {
+            "key": "whatsapp",
+            "label": "Click en WhatsApp",
+            "value": sum(1 for row in active_rows if row["has_whatsapp_click"]),
+            "hint": "Intención de contacto",
+            "query": "lead_whatsapp=1",
+        },
+        {
+            "key": "pdf",
+            "label": "Descarga de PDF",
+            "value": sum(1 for row in active_rows if row["has_pdf_download"]),
+            "hint": "Interés en propuesta",
+            "query": "lead_pdf=1",
+        },
+        {
+            "key": "sin_gestionar",
+            "label": "Sin gestionar",
+            "value": len(unmanaged),
+            "hint": "Pendientes de primer contacto",
+            "query": "lead_unmanaged=1",
+        },
+    ]
 
 
 def get_lead_summary_from_events(events: list[models.CatalogLeadEvent]) -> dict:
@@ -1321,6 +1483,7 @@ def admin_panel(
     lead_status: str = "",
     lead_interest: str = "",
     lead_archived: str = "",
+    lead_unmanaged: str = "",
     lead_id: int | None = None,
     db: Session = Depends(get_db)
 ):
@@ -1340,11 +1503,16 @@ def admin_panel(
     lead_pdf_filter = parse_bool_query_flag(lead_pdf)
     lead_cart_filter = parse_bool_query_flag(lead_cart)
     lead_archived_filter = parse_bool_query_flag(lead_archived) is True
+    lead_unmanaged_filter = parse_bool_query_flag(lead_unmanaged) is True
     lead_status_filter = normalize_lead_status(lead_status) if clean_text(lead_status, default="") else ""
+    if lead_unmanaged_filter:
+        lead_status_filter = "nuevo"
+        lead_archived_filter = False
     lead_interest_filter = clean_text(lead_interest, default="").lower()
     if lead_interest_filter not in {"frio", "interesado", "caliente"}:
         lead_interest_filter = ""
     leads_rows = []
+    leads_kpis = []
     lead_selected = None
     lead_selected_summary = None
     lead_timeline = []
@@ -1360,6 +1528,13 @@ def admin_panel(
             status_filter=lead_status_filter,
             interest_filter=lead_interest_filter,
             include_archived=lead_archived_filter,
+        )
+        leads_kpis = build_leads_kpis(
+            list_catalog_leads_for_admin(
+                db=db,
+                empresa_id=empresa_activa.id,
+                include_archived=False,
+            )
         )
 
         if lead_id:
@@ -1413,10 +1588,12 @@ def admin_panel(
             "lead_status": lead_status_filter,
             "lead_interest": lead_interest_filter,
             "lead_archived": lead_archived_filter,
+            "lead_unmanaged": lead_unmanaged_filter,
             "lead_selected": lead_selected,
             "lead_selected_summary": lead_selected_summary,
             "lead_timeline": lead_timeline,
             "lead_status_labels": LEAD_STATUS_LABELS,
+            "leads_kpis": leads_kpis if empresa_activa else [],
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1553,6 +1730,46 @@ def admin_archive_lead(
         empresa=empresa,
         status="archivado",
         db=db,
+    )
+
+
+@app.post("/admin/leads/{lead_id}/quick-action")
+def admin_quick_action_lead(
+    request: Request,
+    lead_id: int,
+    empresa: str = Form(""),
+    action: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    normalized_action = clean_text(action, default="").lower()
+    if normalized_action == "contactado":
+        return admin_update_lead_status(
+            request=request,
+            lead_id=lead_id,
+            empresa=empresa,
+            status="contactado",
+            db=db,
+        )
+    if normalized_action == "oportunidad":
+        return admin_update_lead_status(
+            request=request,
+            lead_id=lead_id,
+            empresa=empresa,
+            status="oportunidad",
+            db=db,
+        )
+    if normalized_action == "archivar":
+        return admin_archive_lead(
+            request=request,
+            lead_id=lead_id,
+            empresa=empresa,
+            db=db,
+        )
+    empresa_slug = (get_empresa_by_slug(db, empresa) or get_default_empresa(db))
+    return panel_redirect(
+        empresa_slug=empresa_slug.slug if empresa_slug else "",
+        error="Acción rápida inválida",
+        path="/admin",
     )
 
 
