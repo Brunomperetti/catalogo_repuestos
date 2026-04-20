@@ -823,7 +823,9 @@ let offcanvasCarrito = new bootstrap.Offcanvas(document.getElementById('offcanva
 const modalCompradorEl = document.getElementById('modalComprador');
 let modalComprador = new bootstrap.Modal(modalCompradorEl);
 let nombreEmpresa = "{{ empresa.nombre if empresa else '' }}";
+let empresaSlug = "{{ empresa.slug if empresa else '' }}";
 let pedidoStorageKey = "buyer_data_{{ empresa.slug if empresa else 'catalogo' }}";
+const leadData = {{ lead_data|tojson }};
 let pendingCheckoutAction = null;
 modalCompradorEl.addEventListener('hidden.bs.modal', () => {
     pendingCheckoutAction = null;
@@ -849,9 +851,36 @@ function sanitizeInput(value) {
     return (value || "").toString().trim();
 }
 
+async function trackEvent(eventType, payload = {}) {
+    if (!empresaSlug) return;
+    try {
+        await fetch(`/catalogo/${empresaSlug}/track`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                event_type: eventType,
+                product_code: payload.product_code || null,
+                search_term: payload.search_term || null,
+                metadata: payload.metadata || {}
+            })
+        });
+    } catch (e) {
+        console.debug("No se pudo registrar evento", eventType, e);
+    }
+}
+
 function hydrateBuyerData() {
     const saved = localStorage.getItem(pedidoStorageKey);
-    if (!saved) return;
+    if (!saved) {
+        buyerData = {
+            ...buyerData,
+            nombre: sanitizeInput(leadData?.nombre),
+            comercio: sanitizeInput(leadData?.empresa),
+            telefono: sanitizeInput(leadData?.telefono),
+            email: sanitizeInput(leadData?.email),
+        };
+        return;
+    }
     try {
         const parsed = JSON.parse(saved);
         buyerData = {
@@ -865,6 +894,13 @@ function hydrateBuyerData() {
         };
     } catch (e) {
         console.warn("No se pudieron recuperar los datos del comprador.", e);
+        buyerData = {
+            ...buyerData,
+            nombre: sanitizeInput(leadData?.nombre),
+            comercio: sanitizeInput(leadData?.empresa),
+            telefono: sanitizeInput(leadData?.telefono),
+            email: sanitizeInput(leadData?.email),
+        };
     }
 }
 
@@ -965,6 +1001,10 @@ function abrirModal(id) {
     let p = productos.find(x => x.id === id);
 
     if (!p) return;
+    trackEvent("product_viewed", {
+        product_code: p.codigo,
+        metadata: { product_id: p.id }
+    });
 
     document.getElementById("modalTitulo").innerText = p.codigo;
     document.getElementById("modalDescripcion").innerText = p.descripcion;
@@ -1004,6 +1044,10 @@ function abrirModal(id) {
 }
 /* ---------- PEDIDO / CARRITO ---------- */
 function agregarPedido(producto) {
+    trackEvent("cart_item_added", {
+        product_code: producto.codigo,
+        metadata: { quantity: 1 }
+    });
     let item = pedido.find(x => x.codigo === producto.codigo);
     if (item) {
         item.cantidad++;
@@ -1105,6 +1149,9 @@ function enviarWhatsApp() {
     }
 
     requireBuyerData(() => {
+        trackEvent("whatsapp_clicked", {
+            metadata: { cart_items: pedido.length }
+        });
         let mensaje = nombreEmpresa
             ? `Pedido de productos – ${nombreEmpresa}:%0A%0A`
             : "Pedido de productos:%0A%0A";
@@ -1149,6 +1196,9 @@ function descargarPDF() {
         return;
     }
     requireBuyerData(() => {
+        trackEvent("pdf_downloaded", {
+            metadata: { cart_items: pedido.length, source: "pedido_pdf" }
+        });
         const data = {
             empresa: nombreEmpresa,
             buyer: buyerData,
@@ -1356,7 +1406,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     searchBtn.addEventListener('click', () => {
         searchQuery = searchInput.value.trim();
+        if (searchQuery) {
+            trackEvent("search_performed", {
+                search_term: searchQuery
+            });
+        }
         applyFiltersAndSort();
+    });
+
+    searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            searchBtn.click();
+        }
     });
 
     // Vista grid
