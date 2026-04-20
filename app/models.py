@@ -88,6 +88,10 @@ class CatalogLead(Base):
     fecha_ingreso = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     ultima_actividad = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     session_token = Column(String, nullable=True, index=True)
+    estado = Column(String, nullable=False, default="nuevo", index=True)
+    notas_internas = Column(Text, nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     empresa_rel = relationship("Empresa", back_populates="leads")
     eventos = relationship("CatalogLeadEvent", back_populates="lead", cascade="all, delete-orphan")
