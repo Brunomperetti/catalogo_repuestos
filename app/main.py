@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func, case, or_
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
@@ -267,6 +267,14 @@ EVENT_TYPES = {
     "whatsapp_clicked",
     "pdf_downloaded",
 }
+EVENT_TYPE_LABELS = {
+    "catalog_entered": "Ingresó al catálogo",
+    "search_performed": "Realizó búsqueda",
+    "product_viewed": "Vio producto",
+    "cart_item_added": "Agregó al pedido",
+    "whatsapp_clicked": "Click en WhatsApp",
+    "pdf_downloaded": "Descargó PDF",
+}
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -353,6 +361,136 @@ def register_catalog_event(
     db.add(event)
     db.add(lead)
     db.commit()
+
+
+def parse_bool_query_flag(value: str | None) -> bool | None:
+    clean = clean_text(value, default="").lower()
+    if clean in {"1", "true", "si", "sí", "yes"}:
+        return True
+    if clean in {"0", "false", "no"}:
+        return False
+    return None
+
+
+def build_lead_metrics_subquery(db: Session, empresa_id: int):
+    return (
+        db.query(
+            models.CatalogLeadEvent.lead_id.label("lead_id"),
+            func.sum(case((models.CatalogLeadEvent.event_type == "search_performed", 1), else_=0)).label("search_count"),
+            func.sum(case((models.CatalogLeadEvent.event_type == "product_viewed", 1), else_=0)).label("product_view_count"),
+            func.sum(case((models.CatalogLeadEvent.event_type == "cart_item_added", 1), else_=0)).label("cart_add_count"),
+            func.max(case((models.CatalogLeadEvent.event_type == "whatsapp_clicked", 1), else_=0)).label("has_whatsapp_click"),
+            func.max(case((models.CatalogLeadEvent.event_type == "pdf_downloaded", 1), else_=0)).label("has_pdf_download"),
+            func.max(models.CatalogLeadEvent.created_at).label("last_event_at"),
+        )
+        .filter(models.CatalogLeadEvent.empresa_catalogo_id == empresa_id)
+        .group_by(models.CatalogLeadEvent.lead_id)
+        .subquery()
+    )
+
+
+def list_catalog_leads_for_admin(
+    db: Session,
+    empresa_id: int,
+    search_query: str = "",
+    whatsapp_filter: bool | None = None,
+    pdf_filter: bool | None = None,
+    cart_filter: bool | None = None,
+):
+    metrics_sq = build_lead_metrics_subquery(db, empresa_id)
+    query = (
+        db.query(models.CatalogLead, metrics_sq)
+        .outerjoin(metrics_sq, metrics_sq.c.lead_id == models.CatalogLead.id)
+        .filter(models.CatalogLead.empresa_catalogo_id == empresa_id)
+    )
+
+    q = clean_text(search_query, default="")
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(
+            or_(
+                models.CatalogLead.nombre.ilike(pattern),
+                models.CatalogLead.empresa.ilike(pattern),
+                models.CatalogLead.email.ilike(pattern),
+            )
+        )
+
+    if whatsapp_filter is True:
+        query = query.filter(func.coalesce(metrics_sq.c.has_whatsapp_click, 0) > 0)
+    if pdf_filter is True:
+        query = query.filter(func.coalesce(metrics_sq.c.has_pdf_download, 0) > 0)
+    if cart_filter is True:
+        query = query.filter(func.coalesce(metrics_sq.c.cart_add_count, 0) > 0)
+
+    rows = (
+        query
+        .order_by(
+            func.coalesce(metrics_sq.c.last_event_at, models.CatalogLead.ultima_actividad, models.CatalogLead.fecha_ingreso).desc(),
+            models.CatalogLead.id.desc(),
+        )
+        .all()
+    )
+
+    lead_rows = []
+    for lead, metrics in rows:
+        lead_rows.append(
+            {
+                "lead": lead,
+                "search_count": int(getattr(metrics, "search_count", 0) or 0),
+                "product_view_count": int(getattr(metrics, "product_view_count", 0) or 0),
+                "cart_add_count": int(getattr(metrics, "cart_add_count", 0) or 0),
+                "has_whatsapp_click": bool(getattr(metrics, "has_whatsapp_click", 0) or 0),
+                "has_pdf_download": bool(getattr(metrics, "has_pdf_download", 0) or 0),
+                "last_event_at": getattr(metrics, "last_event_at", None),
+            }
+        )
+    return lead_rows
+
+
+def get_lead_summary_from_events(events: list[models.CatalogLeadEvent]) -> dict:
+    summary = {
+        "search_count": 0,
+        "product_view_count": 0,
+        "cart_add_count": 0,
+        "has_whatsapp_click": False,
+        "has_pdf_download": False,
+    }
+    for event in events:
+        if event.event_type == "search_performed":
+            summary["search_count"] += 1
+        elif event.event_type == "product_viewed":
+            summary["product_view_count"] += 1
+        elif event.event_type == "cart_item_added":
+            summary["cart_add_count"] += 1
+        elif event.event_type == "whatsapp_clicked":
+            summary["has_whatsapp_click"] = True
+        elif event.event_type == "pdf_downloaded":
+            summary["has_pdf_download"] = True
+    return summary
+
+
+def build_lead_timeline_rows(events: list[models.CatalogLeadEvent]) -> list[dict]:
+    rows = []
+    for event in events:
+        metadata = {}
+        if event.metadata_json:
+            try:
+                parsed = json.loads(event.metadata_json)
+                metadata = parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                metadata = {}
+        rows.append(
+            {
+                "id": event.id,
+                "created_at": event.created_at,
+                "event_type": event.event_type,
+                "event_label": EVENT_TYPE_LABELS.get(event.event_type, event.event_type),
+                "search_term": event.search_term,
+                "product_code": event.product_code,
+                "metadata": metadata,
+            }
+        )
+    return rows
 
 
 def clean_text(value, default=""):
@@ -1040,8 +1178,14 @@ def home_router(request: Request, db: Session = Depends(get_db)):
 def admin_panel(
     request: Request,
     empresa: str = "",
+    tab: str = "empresa",
     msg: str = "",
     error: str = "",
+    lead_q: str = "",
+    lead_whatsapp: str = "",
+    lead_pdf: str = "",
+    lead_cart: str = "",
+    lead_id: int | None = None,
     db: Session = Depends(get_db)
 ):
     user = require_admin(request, db)
@@ -1052,6 +1196,51 @@ def admin_panel(
     empresa_activa = get_empresa_by_slug(db, empresa) or get_default_empresa(db)
     import time
     using_default_admin_password = os.getenv("ADMIN_PASSWORD", "").strip() in {"", "admin123"}
+    active_tab = clean_text(tab, default="empresa").lower()
+    if active_tab not in {"empresa", "productos", "usuarios", "backup", "avanzado", "leads"}:
+        active_tab = "empresa"
+
+    lead_whatsapp_filter = parse_bool_query_flag(lead_whatsapp)
+    lead_pdf_filter = parse_bool_query_flag(lead_pdf)
+    lead_cart_filter = parse_bool_query_flag(lead_cart)
+    leads_rows = []
+    lead_selected = None
+    lead_selected_summary = None
+    lead_timeline = []
+
+    if empresa_activa:
+        leads_rows = list_catalog_leads_for_admin(
+            db=db,
+            empresa_id=empresa_activa.id,
+            search_query=lead_q,
+            whatsapp_filter=lead_whatsapp_filter,
+            pdf_filter=lead_pdf_filter,
+            cart_filter=lead_cart_filter,
+        )
+
+        if lead_id:
+            lead_selected = (
+                db.query(models.CatalogLead)
+                .filter(
+                    models.CatalogLead.id == lead_id,
+                    models.CatalogLead.empresa_catalogo_id == empresa_activa.id,
+                )
+                .first()
+            )
+
+        if lead_selected:
+            lead_events = (
+                db.query(models.CatalogLeadEvent)
+                .filter(
+                    models.CatalogLeadEvent.lead_id == lead_selected.id,
+                    models.CatalogLeadEvent.empresa_catalogo_id == empresa_activa.id,
+                )
+                .order_by(models.CatalogLeadEvent.created_at.desc(), models.CatalogLeadEvent.id.desc())
+                .limit(200)
+                .all()
+            )
+            lead_selected_summary = get_lead_summary_from_events(lead_events)
+            lead_timeline = build_lead_timeline_rows(lead_events)
 
 
     response = templates.TemplateResponse(
@@ -1069,6 +1258,16 @@ def admin_panel(
             "using_default_admin_password": using_default_admin_password,
             "admin_username": os.getenv("ADMIN_USER", "admin"),
             "app_build": APP_BUILD,
+            "active_tab": active_tab,
+            "leads_rows": leads_rows,
+            "lead_q": lead_q,
+            "lead_q_url": quote(lead_q or ""),
+            "lead_whatsapp": lead_whatsapp_filter,
+            "lead_pdf": lead_pdf_filter,
+            "lead_cart": lead_cart_filter,
+            "lead_selected": lead_selected,
+            "lead_selected_summary": lead_selected_summary,
+            "lead_timeline": lead_timeline,
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
