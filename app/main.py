@@ -399,7 +399,15 @@ def list_catalog_leads_for_admin(
 ):
     metrics_sq = build_lead_metrics_subquery(db, empresa_id)
     query = (
-        db.query(models.CatalogLead, metrics_sq)
+        db.query(
+            models.CatalogLead,
+            metrics_sq.c.search_count,
+            metrics_sq.c.product_view_count,
+            metrics_sq.c.cart_add_count,
+            metrics_sq.c.has_whatsapp_click,
+            metrics_sq.c.has_pdf_download,
+            metrics_sq.c.last_event_at,
+        )
         .outerjoin(metrics_sq, metrics_sq.c.lead_id == models.CatalogLead.id)
         .filter(models.CatalogLead.empresa_catalogo_id == empresa_id)
     )
@@ -432,16 +440,24 @@ def list_catalog_leads_for_admin(
     )
 
     lead_rows = []
-    for lead, metrics in rows:
+    for (
+        lead,
+        search_count,
+        product_view_count,
+        cart_add_count,
+        has_whatsapp_click,
+        has_pdf_download,
+        last_event_at,
+    ) in rows:
         lead_rows.append(
             {
                 "lead": lead,
-                "search_count": int(getattr(metrics, "search_count", 0) or 0),
-                "product_view_count": int(getattr(metrics, "product_view_count", 0) or 0),
-                "cart_add_count": int(getattr(metrics, "cart_add_count", 0) or 0),
-                "has_whatsapp_click": bool(getattr(metrics, "has_whatsapp_click", 0) or 0),
-                "has_pdf_download": bool(getattr(metrics, "has_pdf_download", 0) or 0),
-                "last_event_at": getattr(metrics, "last_event_at", None),
+                "search_count": int(search_count or 0),
+                "product_view_count": int(product_view_count or 0),
+                "cart_add_count": int(cart_add_count or 0),
+                "has_whatsapp_click": bool(has_whatsapp_click or 0),
+                "has_pdf_download": bool(has_pdf_download or 0),
+                "last_event_at": last_event_at,
             }
         )
     return lead_rows
